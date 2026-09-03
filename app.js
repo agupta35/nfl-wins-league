@@ -536,6 +536,7 @@ function renderOwnerMatchup(game, selectedTeam, opponent, model) {
     weekday: "short",
     month: "short",
     day: "numeric",
+    year: "numeric",
     hour: "numeric",
     minute: "2-digit",
   });
