@@ -1,14 +1,21 @@
 # NFL Wins Pool Arena
 
-A static live scoreboard for an NFL wins pool.
+A live scoreboard for a five-player NFL wins pool. Each owner has six NFL teams.
 
 ## What It Tracks
 
-- Owner leaderboard by drafted-team wins.
-- Points scored as the tiebreaker.
+- Each drafted NFL team win counts as one league win.
+- Leaderboard order is wins, then total regular-season points scored.
 - Live games and weekly owner summaries.
 - Head-to-head wins when one owner's drafted team beats another owner's drafted team.
-- Editable draft board saved in browser localStorage.
+- Fixed imported draft for Carlton, A-Rod, Logan, Jared, and Ash.
+
+## League Rules
+
+- Regular season only. ESPN requests use regular-season type `2`.
+- Every drafted NFL team win has equal weight.
+- Total regular-season points scored is the only tiebreaker.
+- Head to Head counts only games where drafted teams belonging to two different owners play each other.
 
 ## Data Source
 
@@ -18,7 +25,7 @@ The app polls ESPN's public NFL scoreboard endpoint:
 https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard
 ```
 
-No API key is required. Because this is an unofficial public endpoint, the UI keeps the draft editable and can keep showing cached scores if the feed fails.
+No API key is required. Because this is an unofficial public endpoint, the app caches scores in the browser if the feed is temporarily unavailable.
 
 ## Run Locally
 
@@ -36,12 +43,12 @@ http://localhost:5173
 
 The local server proxies `/api/scoreboard` to ESPN so browser CORS does not block live updates.
 
-## Cloudflare Pages
+## Vercel
 
-Use these settings:
+The production app is deployed at:
 
-- Build command: leave blank
-- Build output directory: `.`
-- Functions directory: `functions`
+```txt
+https://nfl-wins-league.vercel.app
+```
 
-The production `/api/scoreboard` endpoint is implemented in `functions/api/scoreboard.js`.
+Vercel serves the `/api/scoreboard` proxy from `api/scoreboard.js`. No Supabase database is currently required because the draft is fixed and ESPN is the live data source.
