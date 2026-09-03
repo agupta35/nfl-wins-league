@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NFL Wins Pool Arena</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Live NFL Wins League</p>
+          <h1>Wins Pool Arena</h1>
+        </div>
+        <div class="sync-panel">
+          <label class="week-picker">
+            <span>Season</span>
+            <select id="seasonSelect"></select>
+          </label>
+          <div>
+            <span class="label">Data Feed</span>
+            <strong id="feedStatus">Connecting</strong>
+          </div>
+          <button id="refreshButton" class="control-button" type="button">Sync Scores</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="score-strip" aria-label="League summary">
+          <div class="stat-tile">
+            <span class="label">Season</span>
+            <strong id="seasonValue">2026</strong>
+          </div>
+          <div class="stat-tile">
+            <span class="label">Week</span>
+            <strong id="weekValue">1</strong>
+          </div>
+          <div class="stat-tile">
+            <span class="label">Live Games</span>
+            <strong id="liveGamesValue">0</strong>
+          </div>
+          <div class="stat-tile">
+            <span class="label">Final Games</span>
+            <strong id="finalGamesValue">0</strong>
+          </div>
+          <div class="stat-tile">
+            <span class="label">Last Sync</span>
+            <strong id="lastSyncValue">--</strong>
+          </div>
+        </section>
+
+        <section id="draftNotice" class="notice" hidden></section>
+
+        <section class="arena-grid">
+          <article class="leaderboard-panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Standings</p>
+                <h2>Leaderboard</h2>
+              </div>
+              <span class="pill">Wins, then points</span>
+            </div>
+            <div id="leaderboard" class="leaderboard"></div>
+          </article>
+
+          <article class="champion-panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Current Boss</p>
+                <h2 id="leaderName">--</h2>
+              </div>
+              <span id="leaderRecord" class="pill accent">0 wins</span>
+            </div>
+            <div id="leaderTeams" class="team-stack"></div>
+          </article>
+        </section>
+
+        <section class="tabs" aria-label="Dashboard views">
+          <button class="tab-button active" data-tab="matchups" type="button">Matchups</button>
+          <button class="tab-button" data-tab="headToHead" type="button">Head to Head</button>
+          <button class="tab-button" data-tab="draft" type="button">Draft Board</button>
+        </section>
+
+        <section id="matchupsTab" class="tab-panel active">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Game Feed</p>
+              <h2>Weekly Matchups</h2>
+            </div>
+            <label class="week-picker">
+              <span>Week</span>
+              <select id="weekSelect"></select>
+            </label>
+          </div>
+          <div id="weeklyOwnerSummary" class="owner-summary"></div>
+          <div id="gamesGrid" class="games-grid"></div>
+        </section>
+
+        <section id="headToHeadTab" class="tab-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Owner Battles</p>
+              <h2>Head to Head Wins</h2>
+            </div>
+            <span class="pill">Only drafted teams vs drafted teams</span>
+          </div>
+          <div id="headToHeadMatrix" class="matrix-wrap"></div>
+        </section>
+
+        <section id="draftTab" class="tab-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Roster Loadout</p>
+              <h2>Draft Board</h2>
+            </div>
+            <div class="draft-actions">
+              <button id="resetDraftButton" class="ghost-button" type="button">Reset CSV Draft</button>
+              <button id="saveDraftButton" class="control-button" type="button">Save Draft</button>
+            </div>
+          </div>
+          <div id="draftEditor" class="draft-editor"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
