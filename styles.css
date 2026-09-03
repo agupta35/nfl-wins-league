@@ -635,6 +635,72 @@ h3 {
   font-weight: 800;
 }
 
+.yearly-board {
+  display: grid;
+  gap: 10px;
+}
+
+.yearly-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.3fr) repeat(4, minmax(94px, 1fr));
+  align-items: stretch;
+  min-height: 76px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #11161b;
+  overflow: hidden;
+}
+
+.yearly-owner,
+.yearly-season-stat,
+.yearly-total {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  min-width: 0;
+  padding: 10px;
+  text-align: center;
+}
+
+.yearly-owner {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.yearly-owner strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yearly-season-stat + .yearly-season-stat,
+.yearly-total {
+  border-left: 1px solid var(--line);
+}
+
+.yearly-total {
+  background: rgba(57, 229, 140, 0.06);
+}
+
+.yearly-season-stat span,
+.yearly-total span,
+.yearly-season-stat small,
+.yearly-total small {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.yearly-season-stat strong,
+.yearly-total strong {
+  margin: 2px 0;
+  font-size: 1rem;
+}
+
 @media (max-width: 900px) {
   .topbar,
   .section-heading {
@@ -692,5 +758,15 @@ h3 {
 
   .h2h-player {
     padding: 14px 10px;
+  }
+
+  .yearly-row {
+    grid-template-columns: minmax(120px, 1.2fr) repeat(4, minmax(76px, 1fr));
+  }
+
+  .yearly-owner,
+  .yearly-season-stat,
+  .yearly-total {
+    padding: 8px 5px;
   }
 }

@@ -109,6 +109,8 @@ const state = {
   selectedWeekIsManual: new URLSearchParams(window.location.search).has("week"),
   selectedOwner: "",
   selectedHeadToHeadOwner: "",
+  yearlyStandings: null,
+  yearlyIsLoading: false,
   lastSync: null,
   fullRefreshAt: 0,
   isSyncing: false,
@@ -133,6 +135,8 @@ const els = {
   gamesGrid: document.querySelector("#gamesGrid"),
   rosterGrid: document.querySelector("#rosterGrid"),
   headToHeadMatrix: document.querySelector("#headToHeadMatrix"),
+  yearToYearStatus: document.querySelector("#yearToYearStatus"),
+  yearToYearBoard: document.querySelector("#yearToYearBoard"),
 };
 
 init();
@@ -188,6 +192,7 @@ function bindEvents() {
       document.querySelectorAll(".tab-panel").forEach((item) => item.classList.remove("active"));
       button.classList.add("active");
       document.querySelector(`#${button.dataset.tab}Tab`).classList.add("active");
+      if (button.dataset.tab === "yearToYear") loadYearToYearStandings();
     });
   });
 
@@ -278,12 +283,12 @@ async function refreshAllWeeks() {
   boards.filter(Boolean).forEach((board) => ingestScoreboard(board));
 }
 
-async function fetchScoreboard(week) {
+async function fetchScoreboard(week, season = state.season) {
   const url = new URL(SCOREBOARD_API_URL, window.location.origin);
   url.searchParams.set("seasontype", String(REGULAR_SEASON_TYPE));
   if (week) {
     url.searchParams.set("week", String(week));
-    url.searchParams.set("dates", String(state.season));
+    url.searchParams.set("dates", String(season));
   }
 
   const response = await fetch(url.toString(), { cache: "no-store" });
@@ -342,6 +347,84 @@ function render() {
   renderWeekly(model);
   renderRosters(model);
   renderHeadToHead(model);
+  renderYearToYear();
+}
+
+async function loadYearToYearStandings() {
+  if (state.yearlyIsLoading || state.yearlyStandings) return;
+
+  state.yearlyIsLoading = true;
+  renderYearToYear();
+
+  try {
+    const seasonRows = await Promise.all(
+      SEASONS.map(async (season) => {
+        const gamesByWeek = await loadSeasonGames(season);
+        return [season, calculateSeasonStandings(gamesByWeek)];
+      }),
+    );
+    state.yearlyStandings = new Map(seasonRows);
+  } catch (error) {
+    console.error(error);
+    state.yearlyStandings = new Map();
+  } finally {
+    state.yearlyIsLoading = false;
+    renderYearToYear();
+  }
+}
+
+async function loadSeasonGames(season) {
+  if (season === state.season && Object.keys(state.gamesByWeek).length === WEEKS.length) {
+    return state.gamesByWeek;
+  }
+
+  const cached = loadScoreCache(season);
+  if (Object.keys(cached).length === WEEKS.length) return cached;
+
+  const boards = await Promise.all(WEEKS.map((week) => fetchScoreboard(week, season)));
+  const gamesByWeek = {};
+  boards.forEach((board, index) => {
+    gamesByWeek[index + 1] = (board.events || []).map(normalizeGame);
+  });
+  saveSeasonScoreCache(season, gamesByWeek);
+  return gamesByWeek;
+}
+
+function calculateSeasonStandings(gamesByWeek) {
+  const ownerByTeam = new Map();
+  state.draft.forEach((entry) => entry.teams.forEach((team) => ownerByTeam.set(team, entry.owner)));
+
+  const standings = state.draft.map((entry) => ({
+    owner: entry.owner,
+    wins: 0,
+    losses: 0,
+    pointsFor: 0,
+  }));
+  const standingsByOwner = new Map(standings.map((entry) => [entry.owner, entry]));
+
+  Object.values(gamesByWeek)
+    .flat()
+    .forEach((game) => {
+      if (!game.completed || game.competitors.length < 2) return;
+      const [first, second] = game.competitors;
+      [first, second].forEach((team, index) => {
+        const owner = ownerByTeam.get(team.abbrev);
+        if (!owner) return;
+        const row = standingsByOwner.get(owner);
+        const opponent = index === 0 ? second : first;
+        row.pointsFor += team.score;
+        if (team.score > opponent.score) row.wins += 1;
+        if (team.score < opponent.score) row.losses += 1;
+      });
+    });
+
+  return standings.sort(
+    (a, b) =>
+      b.wins - a.wins ||
+      b.pointsFor - a.pointsFor ||
+      a.losses - b.losses ||
+      a.owner.localeCompare(b.owner),
+  );
 }
 
 function buildLeagueModel() {
@@ -682,6 +765,56 @@ function renderHeadToHead(model) {
   `;
 }
 
+function renderYearToYear() {
+  if (state.yearlyIsLoading) {
+    els.yearToYearStatus.textContent = "Loading seasons";
+    els.yearToYearBoard.innerHTML = `<div class="notice">Loading regular-season results for 2024, 2025, and 2026.</div>`;
+    return;
+  }
+
+  if (!state.yearlyStandings) {
+    els.yearToYearStatus.textContent = "Load when opened";
+    els.yearToYearBoard.innerHTML = `<div class="notice">Open this tab to load and compare regular-season results across each saved roster year.</div>`;
+    return;
+  }
+
+  const years = [...SEASONS].sort((a, b) => a - b);
+  const rows = state.draft
+    .map((entry) => {
+      const results = years.map((year) => state.yearlyStandings.get(year)?.find((row) => row.owner === entry.owner));
+      const totalWins = results.reduce((total, row) => total + (row?.wins || 0), 0);
+      const totalPoints = results.reduce((total, row) => total + (row?.pointsFor || 0), 0);
+      return { owner: entry.owner, results, totalWins, totalPoints };
+    })
+    .sort(
+      (a, b) =>
+        b.totalWins - a.totalWins ||
+        b.totalPoints - a.totalPoints ||
+        a.owner.localeCompare(b.owner),
+    );
+
+  els.yearToYearStatus.textContent = "Regular season only";
+  els.yearToYearBoard.innerHTML = rows
+    .map(
+      (entry, index) => `
+        <article class="yearly-row">
+          <div class="yearly-owner"><span class="rank">${index + 1}</span><strong>${escapeHtml(entry.owner)}</strong></div>
+          ${entry.results
+            .map((result, year) => `
+              <div class="yearly-season-stat">
+                <span>${years[year]}</span>
+                <strong>${result ? `${result.wins} W` : "--"}</strong>
+                <small>${result ? `${result.pointsFor} pts` : "No roster"}</small>
+              </div>
+            `)
+            .join("")}
+          <div class="yearly-total"><span>Total</span><strong>${entry.totalWins} W</strong><small>${entry.totalPoints} pts</small></div>
+        </article>
+      `,
+    )
+    .join("");
+}
+
 function renderTeamChip(team, model) {
   const name = teamName(team);
   const stats = model.teamStats.get(team);
@@ -713,13 +846,17 @@ function loadScoreCache(season) {
 }
 
 function saveScoreCache() {
+  saveSeasonScoreCache(state.season, state.gamesByWeek);
+}
+
+function saveSeasonScoreCache(season, gamesByWeek) {
   let cache = {};
   try {
     cache = JSON.parse(localStorage.getItem(SCORE_CACHE_KEY)) || {};
   } catch {
     cache = {};
   }
-  cache[state.season] = state.gamesByWeek;
+  cache[season] = gamesByWeek;
   localStorage.setItem(SCORE_CACHE_KEY, JSON.stringify(cache));
 }
 
