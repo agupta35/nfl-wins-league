@@ -532,8 +532,10 @@ function renderWeekly(model) {
 
 function renderOwnerMatchup(game, selectedTeam, opponent, model) {
   const statusClass = game.completed ? "final" : isLive(game) ? "live" : "";
-  const time = new Date(game.date).toLocaleString([], {
+  const kickoff = new Date(game.date).toLocaleString([], {
     weekday: "short",
+    month: "short",
+    day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   });
@@ -541,7 +543,7 @@ function renderOwnerMatchup(game, selectedTeam, opponent, model) {
   return `
     <article class="matchup-card ${game.completed && selectedTeam.winner ? "won" : ""}">
       <div class="matchup-top">
-        <span>${escapeHtml(time)}</span>
+        <span>${escapeHtml(kickoff)}</span>
         <span class="game-status ${statusClass}">${escapeHtml(game.statusText || game.status)}</span>
       </div>
       ${renderMatchupSide(selectedTeam, model, true)}
