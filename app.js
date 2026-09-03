@@ -470,7 +470,6 @@ function renderLeaderboard(model) {
           <div class="rank">${index + 1}</div>
           <div>
             <div class="owner-name">${escapeHtml(entry.owner)}</div>
-            <span class="mini-label">${entry.teams.length} teams loaded</span>
           </div>
           <div class="metric">
             <span class="mini-label">Wins</span>
