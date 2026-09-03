@@ -570,6 +570,71 @@ h3 {
   font-size: 1.5rem;
 }
 
+.roster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 12px;
+}
+
+.roster-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #11161b;
+  overflow: hidden;
+}
+
+.roster-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.roster-card-top h3 {
+  margin: 4px 0 0;
+}
+
+.roster-teams {
+  display: grid;
+}
+
+.roster-team-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 58px;
+  padding: 10px 14px;
+}
+
+.roster-team-row + .roster-team-row {
+  border-top: 1px solid rgba(45, 53, 64, 0.7);
+}
+
+.roster-team-stats {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.roster-team-stats strong,
+.roster-team-stats span {
+  display: block;
+}
+
+.roster-team-stats strong {
+  font-size: 0.95rem;
+}
+
+.roster-team-stats span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
 @media (max-width: 900px) {
   .topbar,
   .section-heading {

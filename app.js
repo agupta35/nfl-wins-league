@@ -106,6 +106,7 @@ const state = {
   gamesByWeek: loadScoreCache(getInitialSeason()),
   currentWeek: getInitialSeason() === SEASONS[0] ? 1 : 18,
   selectedWeek: getInitialWeek(),
+  selectedWeekIsManual: new URLSearchParams(window.location.search).has("week"),
   selectedOwner: "",
   selectedHeadToHeadOwner: "",
   lastSync: null,
@@ -127,8 +128,10 @@ const els = {
   leaderRecord: document.querySelector("#leaderRecord"),
   leaderTeams: document.querySelector("#leaderTeams"),
   weekSelect: document.querySelector("#weekSelect"),
+  rosterWeekSelect: document.querySelector("#rosterWeekSelect"),
   weeklyOwnerSummary: document.querySelector("#weeklyOwnerSummary"),
   gamesGrid: document.querySelector("#gamesGrid"),
+  rosterGrid: document.querySelector("#rosterGrid"),
   headToHeadMatrix: document.querySelector("#headToHeadMatrix"),
 };
 
@@ -150,6 +153,7 @@ function bindEvents() {
     state.gamesByWeek = loadScoreCache(state.season);
     state.currentWeek = state.season === SEASONS[0] ? state.currentWeek : 18;
     state.selectedWeek = state.season === SEASONS[0] ? 1 : 18;
+    state.selectedWeekIsManual = state.season !== SEASONS[0];
     els.weekSelect.value = String(state.selectedWeek);
     updateUrlState();
     render();
@@ -157,9 +161,11 @@ function bindEvents() {
   });
 
   els.weekSelect.addEventListener("change", (event) => {
-    state.selectedWeek = Number(event.target.value);
-    updateUrlState();
-    render();
+    setSelectedWeek(event.target.value);
+  });
+
+  els.rosterWeekSelect.addEventListener("change", (event) => {
+    setSelectedWeek(event.target.value);
   });
 
   els.weeklyOwnerSummary.addEventListener("click", (event) => {
@@ -187,14 +193,24 @@ function bindEvents() {
 
 }
 
+function setSelectedWeek(week) {
+  state.selectedWeek = Number(week);
+  state.selectedWeekIsManual = true;
+  updateUrlState();
+  render();
+}
+
 function buildSeasonSelect() {
   els.seasonSelect.innerHTML = SEASONS.map((season) => `<option value="${season}">${season}</option>`).join("");
   els.seasonSelect.value = String(state.season);
 }
 
 function buildWeekSelect() {
-  els.weekSelect.innerHTML = WEEKS.map((week) => `<option value="${week}">Week ${week}</option>`).join("");
+  const options = WEEKS.map((week) => `<option value="${week}">Week ${week}</option>`).join("");
+  els.weekSelect.innerHTML = options;
+  els.rosterWeekSelect.innerHTML = options;
   els.weekSelect.value = String(state.selectedWeek);
+  els.rosterWeekSelect.value = String(state.selectedWeek);
 }
 
 function getInitialSeason() {
@@ -283,7 +299,7 @@ function ingestScoreboard(board, { updateContext = false } = {}) {
   if (board.week?.number) {
     if (updateContext) {
       state.currentWeek = Number(board.week.number);
-      state.selectedWeek = state.selectedWeek || state.currentWeek;
+      if (!state.selectedWeekIsManual) state.selectedWeek = state.currentWeek;
       els.weekSelect.value = String(state.selectedWeek);
     }
   }
@@ -324,6 +340,7 @@ function render() {
   renderLeaderboard(model);
   renderChampion(model);
   renderWeekly(model);
+  renderRosters(model);
   renderHeadToHead(model);
 }
 
@@ -354,6 +371,11 @@ function buildLeagueModel() {
   }));
 
   const standingsByOwner = new Map(standings.map((entry) => [entry.owner, entry]));
+  const teamStats = new Map(
+    owners.flatMap((entry) =>
+      entry.teams.map((team) => [team, { wins: 0, losses: 0, ties: 0, live: false, pointsFor: 0 }]),
+    ),
+  );
   const h2h = new Map();
   owners.forEach((a) => {
     h2h.set(a.owner, new Map());
@@ -361,8 +383,11 @@ function buildLeagueModel() {
   });
 
   const allGames = Object.values(state.gamesByWeek).flat();
+  const cutoffGames = Object.entries(state.gamesByWeek)
+    .filter(([week]) => Number(week) <= state.selectedWeek)
+    .flatMap(([, games]) => games);
 
-  allGames.forEach((game) => {
+  cutoffGames.forEach((game) => {
     if (game.competitors.length < 2) return;
     const [first, second] = game.competitors;
     const pairs = [first, second].map((team) => ({
@@ -373,17 +398,29 @@ function buildLeagueModel() {
     pairs.forEach(({ team, owner }, index) => {
       if (!owner) return;
       const row = standingsByOwner.get(owner);
+      const teamRow = teamStats.get(team.abbrev);
       const opponent = pairs[index === 0 ? 1 : 0].team;
       row.pointsFor += team.score;
       row.pointsAgainst += opponent.score;
+      teamRow.pointsFor += team.score;
 
       if (game.completed) {
         row.gamesFinal += 1;
-        if (team.score > opponent.score) row.wins += 1;
-        if (team.score < opponent.score) row.losses += 1;
-        if (team.score === opponent.score) row.ties += 1;
+        if (team.score > opponent.score) {
+          row.wins += 1;
+          teamRow.wins += 1;
+        }
+        if (team.score < opponent.score) {
+          row.losses += 1;
+          teamRow.losses += 1;
+        }
+        if (team.score === opponent.score) {
+          row.ties += 1;
+          teamRow.ties += 1;
+        }
       } else if (isLive(game)) {
         row.gamesLive += 1;
+        teamRow.live = true;
         if (team.score > opponent.score) row.liveWins += 1;
       }
     });
@@ -407,8 +444,10 @@ function buildLeagueModel() {
     owners,
     ownerByTeam,
     standings,
+    teamStats,
     h2h,
     allGames,
+    cutoffGames,
     selectedGames: state.gamesByWeek[state.selectedWeek] || [],
   };
 }
@@ -416,8 +455,8 @@ function buildLeagueModel() {
 function renderSummary(model) {
   els.seasonValue.textContent = state.season;
   els.weekValue.textContent = state.selectedWeek;
-  els.liveGamesValue.textContent = model.allGames.filter(isLive).length;
-  els.finalGamesValue.textContent = model.allGames.filter((game) => game.completed).length;
+  els.liveGamesValue.textContent = model.cutoffGames.filter(isLive).length;
+  els.finalGamesValue.textContent = model.cutoffGames.filter((game) => game.completed).length;
   els.lastSyncValue.textContent = state.lastSync
     ? state.lastSync.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "--";
@@ -462,6 +501,42 @@ function renderChampion(model) {
   els.leaderName.textContent = leader.owner;
   els.leaderRecord.textContent = `${leader.wins} wins / ${leader.pointsFor} pts`;
   els.leaderTeams.innerHTML = leader.teams.map((team) => renderTeamChip(team, model)).join("");
+}
+
+function renderRosters(model) {
+  els.rosterWeekSelect.value = String(state.selectedWeek);
+  els.rosterGrid.innerHTML = model.owners
+    .map(
+      (owner) => `
+        <article class="roster-card">
+          <div class="roster-card-top">
+            <div>
+              <p class="eyebrow">Through Week ${state.selectedWeek}</p>
+              <h3>${escapeHtml(owner.owner)}</h3>
+            </div>
+            <span class="pill">${owner.teams.length} teams</span>
+          </div>
+          <div class="roster-teams">
+            ${owner.teams
+              .map((team) => {
+                const stats = model.teamStats.get(team);
+                const record = `${stats.wins}-${stats.losses}${stats.ties ? `-${stats.ties}` : ""}`;
+                return `
+                  <div class="roster-team-row">
+                    <div class="team-id">
+                      <img class="team-logo" src="${logoFor(team)}" alt="" />
+                      <div class="team-copy"><strong>${escapeHtml(teamName(team))}</strong><span>${team}${stats.live ? " / Live" : ""}</span></div>
+                    </div>
+                    <div class="roster-team-stats"><strong>${record}</strong><span>${stats.pointsFor} pts</span></div>
+                  </div>
+                `;
+              })
+              .join("")}
+          </div>
+        </article>
+      `,
+    )
+    .join("");
 }
 
 function renderWeekly(model) {
@@ -610,13 +685,7 @@ function renderHeadToHead(model) {
 
 function renderTeamChip(team, model) {
   const name = teamName(team);
-  const games = model.allGames.filter((game) =>
-    game.competitors.some((competitor) => competitor.abbrev === team),
-  );
-  const wins = games.filter((game) => {
-    const mine = game.competitors.find((competitor) => competitor.abbrev === team);
-    return game.completed && mine?.winner;
-  }).length;
+  const stats = model.teamStats.get(team);
 
   return `
     <div class="team-chip">
@@ -627,7 +696,7 @@ function renderTeamChip(team, model) {
           <span>${team}</span>
         </div>
       </div>
-      <div class="metric">${wins} W</div>
+      <div class="metric">${stats.wins}-${stats.losses}${stats.ties ? `-${stats.ties}` : ""}</div>
     </div>
   `;
 }

@@ -76,6 +76,7 @@
 
         <section class="tabs" aria-label="Dashboard views">
           <button class="tab-button active" data-tab="matchups" type="button">Matchups</button>
+          <button class="tab-button" data-tab="rosters" type="button">Rosters</button>
           <button class="tab-button" data-tab="headToHead" type="button">Head to Head</button>
         </section>
 
@@ -92,6 +93,20 @@
           </div>
           <div id="weeklyOwnerSummary" class="owner-summary"></div>
           <div id="gamesGrid" class="games-grid"></div>
+        </section>
+
+        <section id="rostersTab" class="tab-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">League Team Loadouts</p>
+              <h2>Roster Performance</h2>
+            </div>
+            <label class="week-picker">
+              <span>Through Week</span>
+              <select id="rosterWeekSelect"></select>
+            </label>
+          </div>
+          <div id="rosterGrid" class="roster-grid"></div>
         </section>
 
         <section id="headToHeadTab" class="tab-panel">
