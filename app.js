@@ -1,5 +1,4 @@
 const SCOREBOARD_API_URL = "/api/scoreboard";
-const STORAGE_KEY = "wins-pool-draft-v1";
 const SCORE_CACHE_KEY = "wins-pool-score-cache-v1";
 const POLL_MS = 60_000;
 const FULL_REFRESH_MS = 10 * 60_000;
@@ -102,11 +101,13 @@ const INITIAL_DRAFT = [
 ];
 
 const state = {
-  draft: loadDraft(),
+  draft: cloneDraft(INITIAL_DRAFT),
   season: getInitialSeason(),
   gamesByWeek: loadScoreCache(getInitialSeason()),
   currentWeek: getInitialSeason() === SEASONS[0] ? 1 : 18,
   selectedWeek: getInitialWeek(),
+  selectedOwner: "",
+  selectedHeadToHeadOwner: "",
   lastSync: null,
   fullRefreshAt: 0,
   isSyncing: false,
@@ -121,7 +122,6 @@ const els = {
   liveGamesValue: document.querySelector("#liveGamesValue"),
   finalGamesValue: document.querySelector("#finalGamesValue"),
   lastSyncValue: document.querySelector("#lastSyncValue"),
-  draftNotice: document.querySelector("#draftNotice"),
   leaderboard: document.querySelector("#leaderboard"),
   leaderName: document.querySelector("#leaderName"),
   leaderRecord: document.querySelector("#leaderRecord"),
@@ -130,9 +130,6 @@ const els = {
   weeklyOwnerSummary: document.querySelector("#weeklyOwnerSummary"),
   gamesGrid: document.querySelector("#gamesGrid"),
   headToHeadMatrix: document.querySelector("#headToHeadMatrix"),
-  draftEditor: document.querySelector("#draftEditor"),
-  saveDraftButton: document.querySelector("#saveDraftButton"),
-  resetDraftButton: document.querySelector("#resetDraftButton"),
 };
 
 init();
@@ -165,6 +162,20 @@ function bindEvents() {
     render();
   });
 
+  els.weeklyOwnerSummary.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-owner]");
+    if (!button) return;
+    state.selectedOwner = button.dataset.owner;
+    render();
+  });
+
+  els.headToHeadMatrix.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-h2h-owner]");
+    if (!button) return;
+    state.selectedHeadToHeadOwner = button.dataset.h2hOwner;
+    renderHeadToHead(buildLeagueModel());
+  });
+
   document.querySelectorAll(".tab-button").forEach((button) => {
     button.addEventListener("click", () => {
       document.querySelectorAll(".tab-button").forEach((item) => item.classList.remove("active"));
@@ -174,17 +185,6 @@ function bindEvents() {
     });
   });
 
-  els.saveDraftButton.addEventListener("click", () => {
-    state.draft = readDraftEditor();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.draft));
-    render();
-  });
-
-  els.resetDraftButton.addEventListener("click", () => {
-    state.draft = cloneDraft(INITIAL_DRAFT);
-    localStorage.removeItem(STORAGE_KEY);
-    render();
-  });
 }
 
 function buildSeasonSelect() {
@@ -321,12 +321,10 @@ function normalizeGame(event) {
 function render() {
   const model = buildLeagueModel();
   renderSummary(model);
-  renderDraftNotice(model);
   renderLeaderboard(model);
   renderChampion(model);
   renderWeekly(model);
   renderHeadToHead(model);
-  renderDraftEditor();
 }
 
 function buildLeagueModel() {
@@ -425,28 +423,6 @@ function renderSummary(model) {
     : "--";
 }
 
-function renderDraftNotice(model) {
-  const draftedTeams = new Set(model.owners.flatMap((entry) => entry.teams));
-  const missingTeams = NFL_TEAMS.filter(([abbrev]) => !draftedTeams.has(abbrev)).map(([, name]) => name);
-  const ownerCount = model.owners.length;
-
-  if (ownerCount === 6 && missingTeams.length === 0) {
-    els.draftNotice.hidden = true;
-    return;
-  }
-
-  const messages = [];
-  if (ownerCount !== 6) {
-    messages.push(`CSV loaded ${ownerCount} named owners. Use Draft Board to add or rename players.`);
-  }
-  if (missingTeams.length) {
-    messages.push(`Undrafted NFL teams: ${missingTeams.join(", ")}.`);
-  }
-
-  els.draftNotice.textContent = messages.join(" ");
-  els.draftNotice.hidden = false;
-}
-
 function renderLeaderboard(model) {
   els.leaderboard.innerHTML = model.standings
     .map(
@@ -491,6 +467,9 @@ function renderChampion(model) {
 function renderWeekly(model) {
   els.weekSelect.value = String(state.selectedWeek);
 
+  const ownerNames = model.owners.map((entry) => entry.owner);
+  if (!ownerNames.includes(state.selectedOwner)) state.selectedOwner = ownerNames[0] || "";
+
   const ownerStats = new Map(
     model.owners.map((entry) => [
       entry.owner,
@@ -521,23 +500,37 @@ function renderWeekly(model) {
   els.weeklyOwnerSummary.innerHTML = Array.from(ownerStats.entries())
     .map(
       ([owner, stats]) => `
-        <div class="owner-chip">
+        <button class="owner-chip ${owner === state.selectedOwner ? "active" : ""}" data-owner="${escapeHtml(owner)}" type="button" aria-pressed="${owner === state.selectedOwner}">
           <div>
             <strong>${escapeHtml(owner)}</strong>
             <span>${stats.games} games, ${stats.live} live</span>
           </div>
           <div class="metric">${stats.wins} W / ${stats.points} PTS</div>
-        </div>
+        </button>
       `,
     )
     .join("");
 
-  els.gamesGrid.innerHTML = model.selectedGames.length
-    ? model.selectedGames.map((game) => renderGameCard(game, model)).join("")
-    : `<div class="notice">No games loaded for Week ${state.selectedWeek} yet. Try Sync Scores.</div>`;
+  const ownerGames = model.selectedGames
+    .map((game) => {
+      const selectedTeam = game.competitors.find(
+        (team) => model.ownerByTeam.get(team.abbrev) === state.selectedOwner,
+      );
+      if (!selectedTeam) return null;
+      return {
+        game,
+        selectedTeam,
+        opponent: game.competitors.find((team) => team !== selectedTeam),
+      };
+    })
+    .filter(Boolean);
+
+  els.gamesGrid.innerHTML = ownerGames.length
+    ? ownerGames.map(({ game, selectedTeam, opponent }) => renderOwnerMatchup(game, selectedTeam, opponent, model)).join("")
+    : `<div class="notice">No ${escapeHtml(state.selectedOwner || "owner")} games are loaded for Week ${state.selectedWeek} yet. Try Sync Scores.</div>`;
 }
 
-function renderGameCard(game, model) {
+function renderOwnerMatchup(game, selectedTeam, opponent, model) {
   const statusClass = game.completed ? "final" : isLive(game) ? "live" : "";
   const time = new Date(game.date).toLocaleString([], {
     weekday: "short",
@@ -546,27 +539,29 @@ function renderGameCard(game, model) {
   });
 
   return `
-    <article class="game-card">
-      <div class="game-top">
+    <article class="matchup-card ${game.completed && selectedTeam.winner ? "won" : ""}">
+      <div class="matchup-top">
         <span>${escapeHtml(time)}</span>
         <span class="game-status ${statusClass}">${escapeHtml(game.statusText || game.status)}</span>
       </div>
-      ${game.competitors.map((team) => renderCompetitor(team, model, game.completed)).join("")}
+      ${renderMatchupSide(selectedTeam, model, true)}
+      <div class="matchup-divider"><span>VS</span></div>
+      ${renderMatchupSide(opponent, model, false)}
     </article>
   `;
 }
 
-function renderCompetitor(team, model, completed) {
+function renderMatchupSide(team, model, isSelected) {
   const owner = model.ownerByTeam.get(team.abbrev);
-  const winnerClass = completed && team.winner ? " winner" : "";
+  const selectedClass = isSelected ? " selected-team" : "";
 
   return `
-    <div class="competitor${winnerClass}">
+    <div class="matchup-side${selectedClass}">
       <div class="team-id">
         <img class="team-logo" src="${team.logo || logoFor(team.abbrev)}" alt="" />
         <div class="team-copy">
           <strong>${escapeHtml(team.displayName || team.abbrev)}</strong>
-          <span>${team.homeAway === "home" ? "Home" : "Away"} ${owner ? ` / <span class="owner-tag">${escapeHtml(owner)}</span>` : " / Undrafted"}</span>
+          <span>${team.homeAway === "home" ? "Home" : "Away"}${owner ? ` / <span class="owner-tag">${escapeHtml(owner)}</span>` : " / Undrafted"}</span>
         </div>
       </div>
       <div class="score">${team.score}</div>
@@ -576,47 +571,38 @@ function renderCompetitor(team, model, completed) {
 
 function renderHeadToHead(model) {
   const owners = model.owners.map((entry) => entry.owner);
-  const header = owners.map((owner) => `<th>${escapeHtml(owner)}</th>`).join("");
-  const rows = owners
-    .map((rowOwner) => {
-      const cells = owners
-        .map((colOwner) => {
-          if (rowOwner === colOwner) return `<td>--</td>`;
-          return `<td>${model.h2h.get(rowOwner)?.get(colOwner) || 0}</td>`;
-        })
-        .join("");
-      return `<tr><td>${escapeHtml(rowOwner)}</td>${cells}</tr>`;
-    })
-    .join("");
+  if (!owners.includes(state.selectedHeadToHeadOwner)) {
+    state.selectedHeadToHeadOwner = state.selectedOwner || owners[0] || "";
+  }
 
-  els.headToHeadMatrix.innerHTML = `<table><thead><tr><th>Owner</th>${header}</tr></thead><tbody>${rows}</tbody></table>`;
-}
-
-function renderDraftEditor() {
-  const draft = normalizeDraftSlots(state.draft);
-  els.draftEditor.innerHTML = draft
+  const selectedOwner = state.selectedHeadToHeadOwner;
+  const ownerTabs = owners
     .map(
-      (entry, ownerIndex) => `
-        <div class="draft-card" data-owner-index="${ownerIndex}">
-          <label>Owner</label>
-          <input data-field="owner" value="${escapeHtml(entry.owner)}" placeholder="Player ${ownerIndex + 1}" />
-          ${Array.from({ length: 6 }, (_, teamIndex) => {
-            const selected = entry.teams[teamIndex] || "";
-            return `
-              <label>Team ${teamIndex + 1}</label>
-              <select data-team-index="${teamIndex}">
-                <option value="">Unassigned</option>
-                ${NFL_TEAMS.map(
-                  ([abbrev, name]) =>
-                    `<option value="${abbrev}" ${selected === abbrev ? "selected" : ""}>${name}</option>`,
-                ).join("")}
-              </select>
-            `;
-          }).join("")}
-        </div>
+      (owner) => `
+        <button class="h2h-owner-button ${owner === selectedOwner ? "active" : ""}" data-h2h-owner="${escapeHtml(owner)}" type="button" aria-pressed="${owner === selectedOwner}">${escapeHtml(owner)}</button>
       `,
     )
     .join("");
+  const matchups = owners
+    .filter((owner) => owner !== selectedOwner)
+    .map((opponent) => {
+      const selectedWins = model.h2h.get(selectedOwner)?.get(opponent) || 0;
+      const opponentWins = model.h2h.get(opponent)?.get(selectedOwner) || 0;
+      const leaderClass = selectedWins > opponentWins ? " leading" : opponentWins > selectedWins ? " trailing" : "";
+      return `
+        <article class="h2h-matchup${leaderClass}">
+          <div class="h2h-player selected"><strong>${escapeHtml(selectedOwner)}</strong><span>Wins</span></div>
+          <div class="h2h-score"><strong>${selectedWins}</strong><span>-</span><strong>${opponentWins}</strong></div>
+          <div class="h2h-player"><strong>${escapeHtml(opponent)}</strong><span>Wins</span></div>
+        </article>
+      `;
+    })
+    .join("");
+
+  els.headToHeadMatrix.innerHTML = `
+    <div class="h2h-owner-tabs" aria-label="Choose an owner">${ownerTabs}</div>
+    <div class="h2h-list">${matchups || `<div class="notice">No head to head matchups are available yet.</div>`}</div>
+  `;
 }
 
 function renderTeamChip(team, model) {
@@ -641,33 +627,6 @@ function renderTeamChip(team, model) {
       <div class="metric">${wins} W</div>
     </div>
   `;
-}
-
-function readDraftEditor() {
-  return Array.from(document.querySelectorAll(".draft-card"))
-    .map((card) => ({
-      owner: card.querySelector('[data-field="owner"]').value.trim(),
-      teams: Array.from(card.querySelectorAll("select"))
-        .map((select) => select.value)
-        .filter(Boolean),
-    }))
-    .filter((entry) => entry.owner || entry.teams.length);
-}
-
-function normalizeDraftSlots(draft) {
-  const normalized = cloneDraft(draft);
-  while (normalized.length < 6) normalized.push({ owner: "", teams: [] });
-  return normalized.slice(0, 6);
-}
-
-function loadDraft() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (Array.isArray(stored)) return stored;
-  } catch {
-    localStorage.removeItem(STORAGE_KEY);
-  }
-  return cloneDraft(INITIAL_DRAFT);
 }
 
 function loadScoreCache(season) {

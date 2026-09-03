@@ -50,8 +50,6 @@
           </div>
         </section>
 
-        <section id="draftNotice" class="notice" hidden></section>
-
         <section class="arena-grid">
           <article class="leaderboard-panel">
             <div class="section-heading">
@@ -79,7 +77,6 @@
         <section class="tabs" aria-label="Dashboard views">
           <button class="tab-button active" data-tab="matchups" type="button">Matchups</button>
           <button class="tab-button" data-tab="headToHead" type="button">Head to Head</button>
-          <button class="tab-button" data-tab="draft" type="button">Draft Board</button>
         </section>
 
         <section id="matchupsTab" class="tab-panel active">
@@ -103,23 +100,9 @@
               <p class="eyebrow">Owner Battles</p>
               <h2>Head to Head Wins</h2>
             </div>
-            <span class="pill">Only drafted teams vs drafted teams</span>
+            <span class="pill">Drafted teams only</span>
           </div>
           <div id="headToHeadMatrix" class="matrix-wrap"></div>
-        </section>
-
-        <section id="draftTab" class="tab-panel">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Roster Loadout</p>
-              <h2>Draft Board</h2>
-            </div>
-            <div class="draft-actions">
-              <button id="resetDraftButton" class="ghost-button" type="button">Reset CSV Draft</button>
-              <button id="saveDraftButton" class="control-button" type="button">Save Draft</button>
-            </div>
-          </div>
-          <div id="draftEditor" class="draft-editor"></div>
         </section>
       </main>
     </div>
