@@ -106,7 +106,9 @@ const state = {
   gamesByWeek: loadScoreCache(getInitialSeason()),
   currentWeek: getInitialSeason() === SEASONS[0] ? 1 : 18,
   selectedWeek: getInitialWeek(),
-  selectedWeekIsManual: new URLSearchParams(window.location.search).has("week"),
+  selectedWeekIsManual: false,
+  rosterWeek: getInitialWeek(),
+  rosterWeekIsManual: false,
   selectedOwner: "",
   selectedHeadToHeadOwner: "",
   yearlyStandings: null,
@@ -157,7 +159,9 @@ function bindEvents() {
     state.gamesByWeek = loadScoreCache(state.season);
     state.currentWeek = state.season === SEASONS[0] ? state.currentWeek : 18;
     state.selectedWeek = state.season === SEASONS[0] ? 1 : 18;
+    state.rosterWeek = state.selectedWeek;
     state.selectedWeekIsManual = state.season !== SEASONS[0];
+    state.rosterWeekIsManual = state.season !== SEASONS[0];
     els.weekSelect.value = String(state.selectedWeek);
     updateUrlState();
     render();
@@ -169,7 +173,9 @@ function bindEvents() {
   });
 
   els.rosterWeekSelect.addEventListener("change", (event) => {
-    setSelectedWeek(event.target.value);
+    state.rosterWeek = Number(event.target.value);
+    state.rosterWeekIsManual = true;
+    render();
   });
 
   els.weeklyOwnerSummary.addEventListener("click", (event) => {
@@ -215,7 +221,7 @@ function buildWeekSelect() {
   els.weekSelect.innerHTML = options;
   els.rosterWeekSelect.innerHTML = options;
   els.weekSelect.value = String(state.selectedWeek);
-  els.rosterWeekSelect.value = String(state.selectedWeek);
+  els.rosterWeekSelect.value = String(state.rosterWeek);
 }
 
 function getInitialSeason() {
@@ -224,14 +230,13 @@ function getInitialSeason() {
 }
 
 function getInitialWeek() {
-  const week = Number(new URLSearchParams(window.location.search).get("week"));
-  return WEEKS.includes(week) ? week : getInitialSeason() === SEASONS[0] ? 1 : 18;
+  return getInitialSeason() === SEASONS[0] ? 1 : 18;
 }
 
 function updateUrlState() {
   const url = new URL(window.location.href);
   url.searchParams.set("season", String(state.season));
-  url.searchParams.set("week", String(state.selectedWeek));
+  url.searchParams.delete("week");
   window.history.replaceState({}, "", url);
 }
 
@@ -305,7 +310,9 @@ function ingestScoreboard(board, { updateContext = false } = {}) {
     if (updateContext) {
       state.currentWeek = Number(board.week.number);
       if (!state.selectedWeekIsManual) state.selectedWeek = state.currentWeek;
+      if (!state.rosterWeekIsManual) state.rosterWeek = state.currentWeek;
       els.weekSelect.value = String(state.selectedWeek);
+      els.rosterWeekSelect.value = String(state.rosterWeek);
     }
   }
 
@@ -467,7 +474,10 @@ function buildLeagueModel() {
 
   const allGames = Object.values(state.gamesByWeek).flat();
   const cutoffGames = Object.entries(state.gamesByWeek)
-    .filter(([week]) => Number(week) <= state.selectedWeek)
+    .filter(([week]) => Number(week) <= state.currentWeek)
+    .flatMap(([, games]) => games);
+  const rosterGames = Object.entries(state.gamesByWeek)
+    .filter(([week]) => Number(week) <= state.rosterWeek)
     .flatMap(([, games]) => games);
 
   cutoffGames.forEach((game) => {
@@ -528,6 +538,7 @@ function buildLeagueModel() {
     ownerByTeam,
     standings,
     teamStats,
+    rosterTeamStats: buildTeamStats(owners, ownerByTeam, rosterGames),
     h2h,
     allGames,
     cutoffGames,
@@ -535,9 +546,38 @@ function buildLeagueModel() {
   };
 }
 
+function buildTeamStats(owners, ownerByTeam, games) {
+  const teamStats = new Map(
+    owners.flatMap((entry) =>
+      entry.teams.map((team) => [team, { wins: 0, losses: 0, ties: 0, live: false, pointsFor: 0 }]),
+    ),
+  );
+
+  games.forEach((game) => {
+    if (game.competitors.length < 2) return;
+    const [first, second] = game.competitors;
+    [first, second].forEach((team, index) => {
+      if (!ownerByTeam.has(team.abbrev)) return;
+      const opponent = index === 0 ? second : first;
+      const stats = teamStats.get(team.abbrev);
+      stats.pointsFor += team.score;
+
+      if (game.completed) {
+        if (team.score > opponent.score) stats.wins += 1;
+        if (team.score < opponent.score) stats.losses += 1;
+        if (team.score === opponent.score) stats.ties += 1;
+      } else if (isLive(game)) {
+        stats.live = true;
+      }
+    });
+  });
+
+  return teamStats;
+}
+
 function renderSummary(model) {
   els.seasonValue.textContent = state.season;
-  els.weekValue.textContent = state.selectedWeek;
+  els.weekValue.textContent = state.currentWeek;
   els.liveGamesValue.textContent = model.cutoffGames.filter(isLive).length;
   els.finalGamesValue.textContent = model.cutoffGames.filter((game) => game.completed).length;
   els.lastSyncValue.textContent = state.lastSync
@@ -586,14 +626,14 @@ function renderChampion(model) {
 }
 
 function renderRosters(model) {
-  els.rosterWeekSelect.value = String(state.selectedWeek);
+  els.rosterWeekSelect.value = String(state.rosterWeek);
   els.rosterGrid.innerHTML = model.owners
     .map(
       (owner) => `
         <article class="roster-card">
           <div class="roster-card-top">
             <div>
-              <p class="eyebrow">Through Week ${state.selectedWeek}</p>
+              <p class="eyebrow">Through Week ${state.rosterWeek}</p>
               <h3>${escapeHtml(owner.owner)}</h3>
             </div>
             <span class="pill">${owner.teams.length} teams</span>
@@ -601,7 +641,7 @@ function renderRosters(model) {
           <div class="roster-teams">
             ${owner.teams
               .map((team) => {
-                const stats = model.teamStats.get(team);
+                const stats = model.rosterTeamStats.get(team);
                 const record = `${stats.wins}-${stats.losses}${stats.ties ? `-${stats.ties}` : ""}`;
                 return `
                   <div class="roster-team-row">
@@ -699,16 +739,29 @@ function renderOwnerMatchup(game, selectedTeam, opponent, model) {
   });
 
   return `
-    <article class="matchup-card ${game.completed && selectedTeam.winner ? "won" : ""}">
+    <article class="matchup-card ${matchupResultClass(game, selectedTeam, opponent)}">
       <div class="matchup-top">
         <span>${escapeHtml(kickoff)}</span>
-        <span class="game-status ${statusClass}">${escapeHtml(game.statusText || game.status)}</span>
+        <span class="game-status ${statusClass}">${escapeHtml(formatGameStatus(game))}</span>
       </div>
       ${renderMatchupSide(selectedTeam, model, true)}
       <div class="matchup-divider"><span>VS</span></div>
       ${renderMatchupSide(opponent, model, false)}
     </article>
   `;
+}
+
+function matchupResultClass(game, selectedTeam, opponent) {
+  if (!game.completed) return "";
+  if (selectedTeam.score > opponent.score) return "won";
+  if (selectedTeam.score < opponent.score) return "lost";
+  return "";
+}
+
+function formatGameStatus(game) {
+  if (game.completed) return game.statusText || "Final";
+  if (isLive(game)) return game.statusText || "Live";
+  return "Scheduled";
 }
 
 function renderMatchupSide(team, model, isSelected) {
@@ -793,26 +846,41 @@ function renderYearToYear() {
         a.owner.localeCompare(b.owner),
     );
 
-  els.yearToYearStatus.textContent = "Regular season only";
-  els.yearToYearBoard.innerHTML = rows
-    .map(
-      (entry, index) => `
-        <article class="yearly-row">
-          <div class="yearly-owner"><span class="rank">${index + 1}</span><strong>${escapeHtml(entry.owner)}</strong></div>
-          ${entry.results
-            .map((result, year) => `
-              <div class="yearly-season-stat">
-                <span>${years[year]}</span>
-                <strong>${result ? `${result.wins} W` : "--"}</strong>
-                <small>${result ? `${result.pointsFor} pts` : "No roster"}</small>
-              </div>
-            `)
-            .join("")}
-          <div class="yearly-total"><span>Total</span><strong>${entry.totalWins} W</strong><small>${entry.totalPoints} pts</small></div>
+  const champions = years
+    .map((year) => {
+      const champion = state.yearlyStandings.get(year)?.[0];
+      if (!champion) return "";
+      return `
+        <article class="year-champion-card">
+          <p class="eyebrow">${year} Champion</p>
+          <strong>${escapeHtml(champion.owner)}</strong>
+          <span>${champion.wins} wins / ${champion.pointsFor} pts</span>
         </article>
-      `,
-    )
+      `;
+    })
     .join("");
+
+  els.yearToYearStatus.textContent = "Regular season only";
+  els.yearToYearBoard.innerHTML = `
+    <div class="year-champions">${champions}</div>
+    <div class="all-time-heading">
+      <div><p class="eyebrow">${years[0]}-${years.at(-1)}</p><h3>All-Time Wins</h3></div>
+      <span class="pill">Wins, then points</span>
+    </div>
+    <div class="all-time-list">
+      ${rows
+        .map(
+          (entry, index) => `
+            <article class="all-time-row">
+              <div class="all-time-owner"><span class="rank">${index + 1}</span><strong>${escapeHtml(entry.owner)}</strong></div>
+              <div class="all-time-stat"><span>Wins</span><strong>${entry.totalWins}</strong></div>
+              <div class="all-time-stat"><span>Points</span><strong>${entry.totalPoints}</strong></div>
+            </article>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 function renderTeamChip(team, model) {
