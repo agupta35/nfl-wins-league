@@ -111,6 +111,7 @@ const state = {
   rosterWeekIsManual: false,
   selectedOwner: "",
   selectedHeadToHeadOwner: "",
+  selectedScheduleOwner: "",
   yearlyStandings: null,
   yearlyIsLoading: false,
   lastSync: null,
@@ -137,6 +138,8 @@ const els = {
   gamesGrid: document.querySelector("#gamesGrid"),
   rosterGrid: document.querySelector("#rosterGrid"),
   headToHeadMatrix: document.querySelector("#headToHeadMatrix"),
+  scheduleImpactStatus: document.querySelector("#scheduleImpactStatus"),
+  scheduleImpactBoard: document.querySelector("#scheduleImpactBoard"),
   yearToYearStatus: document.querySelector("#yearToYearStatus"),
   yearToYearBoard: document.querySelector("#yearToYearBoard"),
 };
@@ -190,6 +193,13 @@ function bindEvents() {
     if (!button) return;
     state.selectedHeadToHeadOwner = button.dataset.h2hOwner;
     renderHeadToHead(buildLeagueModel());
+  });
+
+  els.scheduleImpactBoard.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-schedule-owner]");
+    if (!button) return;
+    state.selectedScheduleOwner = button.dataset.scheduleOwner;
+    renderScheduleImpact(buildLeagueModel());
   });
 
   document.querySelectorAll(".tab-button").forEach((button) => {
@@ -324,6 +334,7 @@ function ingestScoreboard(board, { updateContext = false } = {}) {
 
 function normalizeGame(event) {
   const competition = event.competitions?.[0] || {};
+  const odds = competition.odds?.[0];
   const competitors = (competition.competitors || []).map((competitor) => ({
     abbrev: competitor.team?.abbreviation,
     displayName: competitor.team?.displayName,
@@ -342,6 +353,16 @@ function normalizeGame(event) {
     status: competition.status?.type?.name || event.status?.type?.name || "STATUS_SCHEDULED",
     statusText: competition.status?.type?.shortDetail || event.status?.type?.shortDetail || "",
     completed: Boolean(competition.status?.type?.completed || event.status?.type?.completed),
+    odds: odds
+      ? {
+          provider: odds.provider?.displayName || odds.provider?.name || "Odds",
+          overUnder: odds.overUnder ?? "--",
+          awaySpread: odds.pointSpread?.away?.close?.line || "--",
+          homeSpread: odds.pointSpread?.home?.close?.line || "--",
+          awayMoneyline: odds.moneyline?.away?.close?.odds || "--",
+          homeMoneyline: odds.moneyline?.home?.close?.odds || "--",
+        }
+      : null,
     competitors,
   };
 }
@@ -354,6 +375,7 @@ function render() {
   renderWeekly(model);
   renderRosters(model);
   renderHeadToHead(model);
+  renderScheduleImpact(model);
   renderYearToYear();
 }
 
@@ -744,9 +766,9 @@ function renderOwnerMatchup(game, selectedTeam, opponent, model) {
         <span>${escapeHtml(kickoff)}</span>
         <span class="game-status ${statusClass}">${escapeHtml(formatGameStatus(game))}</span>
       </div>
-      ${renderMatchupSide(selectedTeam, model, true)}
-      <div class="matchup-divider"><span>VS</span></div>
-      ${renderMatchupSide(opponent, model, false)}
+      ${renderMatchupSide(selectedTeam, model, true, game.odds)}
+      <div class="matchup-divider"><span>VS${game.odds ? ` / O/U ${escapeHtml(game.odds.overUnder)}` : ""}</span></div>
+      ${renderMatchupSide(opponent, model, false, game.odds)}
     </article>
   `;
 }
@@ -764,9 +786,16 @@ function formatGameStatus(game) {
   return "Scheduled";
 }
 
-function renderMatchupSide(team, model, isSelected) {
+function renderMatchupSide(team, model, isSelected, odds) {
   const owner = model.ownerByTeam.get(team.abbrev);
   const selectedClass = isSelected ? " selected-team" : "";
+  const side = team.homeAway === "home" ? "home" : "away";
+  const spread = odds?.[`${side}Spread`];
+  const moneyline = odds?.[`${side}Moneyline`];
+  const oddsMarkup =
+    spread && spread !== "--" && moneyline && moneyline !== "--"
+      ? `<span class="team-odds">Spread ${escapeHtml(spread)} / ML ${escapeHtml(moneyline)}</span>`
+      : "";
 
   return `
     <div class="matchup-side${selectedClass}">
@@ -775,6 +804,7 @@ function renderMatchupSide(team, model, isSelected) {
         <div class="team-copy">
           <strong>${escapeHtml(team.displayName || team.abbrev)}</strong>
           <span>${team.homeAway === "home" ? "Home" : "Away"}${owner ? ` / <span class="owner-tag">${escapeHtml(owner)}</span>` : " / Undrafted"}</span>
+          ${oddsMarkup}
         </div>
       </div>
       <div class="score">${team.score}</div>
@@ -816,6 +846,116 @@ function renderHeadToHead(model) {
     <div class="h2h-owner-tabs" aria-label="Choose an owner">${ownerTabs}</div>
     <div class="h2h-list">${matchups || `<div class="notice">No head to head matchups are available yet.</div>`}</div>
   `;
+}
+
+function renderScheduleImpact(model) {
+  const owners = model.owners.map((entry) => entry.owner);
+  if (!owners.includes(state.selectedScheduleOwner)) {
+    state.selectedScheduleOwner = state.selectedOwner || owners[0] || "";
+  }
+
+  const impactByOwner = new Map(
+    model.owners.map((entry) => [
+      entry.owner,
+      { owner: entry.owner, internal: [], crossOwner: [], undrafted: [] },
+    ]),
+  );
+  const uniqueGames = new Map(model.allGames.map((game) => [game.id, game]));
+
+  uniqueGames.forEach((game) => {
+    if (game.competitors.length < 2) return;
+    const [first, second] = game.competitors;
+    const firstOwner = model.ownerByTeam.get(first.abbrev);
+    const secondOwner = model.ownerByTeam.get(second.abbrev);
+
+    if (firstOwner && secondOwner) {
+      if (firstOwner === secondOwner) {
+        impactByOwner.get(firstOwner).internal.push(game);
+      } else {
+        impactByOwner.get(firstOwner).crossOwner.push({ game, opponent: secondOwner });
+        impactByOwner.get(secondOwner).crossOwner.push({ game, opponent: firstOwner });
+      }
+      return;
+    }
+
+    const draftedOwner = firstOwner || secondOwner;
+    if (draftedOwner) impactByOwner.get(draftedOwner).undrafted.push(game);
+  });
+
+  const loadedWeeks = Object.keys(state.gamesByWeek).length;
+  const allImpact = Array.from(impactByOwner.values());
+  const internalTotal = allImpact.reduce((total, entry) => total + entry.internal.length, 0);
+  const crossOwnerTotal = allImpact.reduce((total, entry) => total + entry.crossOwner.length, 0) / 2;
+  const undraftedTotal = allImpact.reduce((total, entry) => total + entry.undrafted.length, 0);
+  const selected = impactByOwner.get(state.selectedScheduleOwner);
+
+  els.scheduleImpactStatus.textContent = `${loadedWeeks}/18 weeks loaded`;
+  if (!selected) {
+    els.scheduleImpactBoard.innerHTML = `<div class="notice">Schedule data is unavailable.</div>`;
+    return;
+  }
+
+  const ownerTabs = owners
+    .map(
+      (owner) =>
+        `<button class="h2h-owner-button ${owner === selected.owner ? "active" : ""}" data-schedule-owner="${escapeHtml(owner)}" type="button" aria-pressed="${owner === selected.owner}">${escapeHtml(owner)}</button>`,
+    )
+    .join("");
+
+  const opponentCounts = new Map();
+  selected.crossOwner.forEach(({ opponent }) => opponentCounts.set(opponent, (opponentCounts.get(opponent) || 0) + 1));
+  const ownerMatchups = owners
+    .filter((owner) => owner !== selected.owner)
+    .map(
+      (owner) =>
+        `<div class="schedule-opponent"><span>${escapeHtml(owner)}</span><strong>${opponentCounts.get(owner) || 0}</strong></div>`,
+    )
+    .join("");
+
+  els.scheduleImpactBoard.innerHTML = `
+    <div class="schedule-total-grid">
+      <div class="schedule-total"><span>Internal pairs</span><strong>${internalTotal}</strong><small>Neutral to owner totals</small></div>
+      <div class="schedule-total"><span>Owner battles</span><strong>${crossOwnerTotal}</strong><small>One owner wins, one loses</small></div>
+      <div class="schedule-total"><span>Vs. undrafted</span><strong>${undraftedTotal}</strong><small>Arizona or Miami</small></div>
+    </div>
+    <div class="h2h-owner-tabs" aria-label="Choose an owner for schedule impact">${ownerTabs}</div>
+    <div class="schedule-owner-grid">
+      <section class="schedule-detail">
+        <div class="schedule-detail-heading"><div><p class="eyebrow">${escapeHtml(selected.owner)}</p><h3>Owner Schedule Mix</h3></div></div>
+        <div class="schedule-owner-metrics">
+          <div><span>Internal W/L</span><strong>${selected.internal.length}</strong><small>Net zero</small></div>
+          <div><span>Cross-owner</span><strong>${selected.crossOwner.length}</strong><small>Head to head</small></div>
+          <div><span>Undrafted</span><strong>${selected.undrafted.length}</strong><small>Outside pool</small></div>
+        </div>
+        <div class="schedule-opponents">${ownerMatchups}</div>
+      </section>
+      <section class="schedule-detail">
+        <div class="schedule-detail-heading"><div><p class="eyebrow">Guaranteed Split</p><h3>Internal Matchups</h3></div><span class="pill">${selected.internal.length} games</span></div>
+        <div class="schedule-game-list">${renderScheduleGameList(selected.internal, "No internal roster matchups.")}</div>
+      </section>
+      <section class="schedule-detail">
+        <div class="schedule-detail-heading"><div><p class="eyebrow">Outside The Pool</p><h3>Undrafted Opponents</h3></div><span class="pill">${selected.undrafted.length} games</span></div>
+        <div class="schedule-game-list">${renderScheduleGameList(selected.undrafted, "No games against undrafted teams.")}</div>
+      </section>
+    </div>
+  `;
+}
+
+function renderScheduleGameList(games, emptyMessage) {
+  if (!games.length) return `<div class="schedule-empty">${emptyMessage}</div>`;
+  return games
+    .slice()
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .map((game) => {
+      const away = game.competitors.find((team) => team.homeAway === "away") || game.competitors[0];
+      const home = game.competitors.find((team) => team.homeAway === "home") || game.competitors[1];
+      return `<div class="schedule-game"><span>W${weekForGame(game)}${game.completed ? " / Final" : ""}</span><strong>${escapeHtml(away.abbrev)} <i>@</i> ${escapeHtml(home.abbrev)}</strong></div>`;
+    })
+    .join("");
+}
+
+function weekForGame(game) {
+  return Object.entries(state.gamesByWeek).find(([, games]) => games.some((item) => item.id === game.id))?.[0] || "--";
 }
 
 function renderYearToYear() {

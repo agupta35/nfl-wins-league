@@ -495,6 +495,16 @@ h3 {
   text-transform: uppercase;
 }
 
+.team-odds {
+  display: block;
+  margin-top: 5px;
+  color: var(--gold) !important;
+  font-size: 0.67rem !important;
+  font-weight: 900 !important;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .h2h-owner-tabs {
   display: flex;
   gap: 8px;
@@ -662,10 +672,132 @@ h3 {
 }
 
 .yearly-board,
-.all-time-list {
+.all-time-list,
+.schedule-impact-board,
+.schedule-game-list {
   display: grid;
   gap: 10px;
 }
+
+.schedule-total-grid,
+.schedule-owner-grid,
+.schedule-owner-metrics,
+.schedule-opponents {
+  display: grid;
+  gap: 10px;
+}
+
+.schedule-total-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.schedule-total,
+.schedule-detail {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #11161b;
+}
+
+.schedule-total {
+  min-height: 104px;
+  padding: 14px;
+}
+
+.schedule-total span,
+.schedule-total small,
+.schedule-owner-metrics span,
+.schedule-owner-metrics small,
+.schedule-game span,
+.schedule-empty {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.schedule-total strong {
+  display: block;
+  margin: 5px 0 2px;
+  color: var(--cyan);
+  font-family: "Oswald", Impact, sans-serif;
+  font-size: 2.2rem;
+  line-height: 0.9;
+}
+
+.schedule-owner-grid {
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.schedule-detail {
+  min-width: 0;
+  padding: 14px;
+}
+
+.schedule-detail-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.schedule-detail-heading h3 { margin: 3px 0 0; }
+
+.schedule-owner-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.schedule-owner-metrics > div {
+  min-width: 0;
+  padding: 10px 8px;
+  border-left: 2px solid var(--line);
+}
+
+.schedule-owner-metrics > div:first-child { border-color: var(--gold); }
+.schedule-owner-metrics > div:nth-child(2) { border-color: var(--cyan); }
+.schedule-owner-metrics > div:last-child { border-color: var(--green); }
+
+.schedule-owner-metrics strong {
+  display: block;
+  margin: 5px 0 2px;
+  font-family: "Oswald", Impact, sans-serif;
+  font-size: 1.6rem;
+  line-height: 0.9;
+}
+
+.schedule-opponents { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.schedule-opponent,
+.schedule-game {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(20, 24, 29, 0.6);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.schedule-opponent strong { color: var(--cyan); }
+
+.schedule-game strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-game strong i { color: var(--muted); font-style: normal; }
+
+.schedule-game span { flex: 0 0 auto; }
+
+.schedule-empty { padding: 10px 0; }
 
 .year-champions {
   display: grid;
@@ -802,6 +934,10 @@ h3 {
     grid-template-columns: 1fr;
   }
 
+  .schedule-owner-grid {
+    grid-template-columns: 1fr;
+  }
+
   .leader-row {
     grid-template-columns: 40px 1fr 72px 72px;
   }
@@ -826,6 +962,10 @@ h3 {
   }
 
   .games-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-total-grid {
     grid-template-columns: 1fr;
   }
 
