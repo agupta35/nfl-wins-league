@@ -785,6 +785,7 @@ function buildProjectedStandings(owners, ownerByTeam, games) {
     expectedWins: 0,
     pricedGames: 0,
     unpricedGames: 0,
+    completedGames: 0,
   }));
   const byOwner = new Map(rows.map((row) => [row.owner, row]));
 
@@ -801,6 +802,7 @@ function buildProjectedStandings(owners, ownerByTeam, games) {
       const row = byOwner.get(owner);
       const opponent = team === first ? second : first;
       if (game.completed) {
+        row.completedGames += 1;
         row.pointsFor += team.score;
         if (team.score > opponent.score) row.wins += 1;
         return;
@@ -1216,19 +1218,28 @@ function renderProjections(model) {
   const rows = model.projectedStandings;
   const pricedGames = rows.reduce((total, row) => total + row.pricedGames, 0);
   const unpricedGames = rows.reduce((total, row) => total + row.unpricedGames, 0);
+  const leader = rows[0];
 
   els.projectionsBoard.innerHTML = rows.length
     ? `
-      <div class="projection-note">${pricedGames} remaining team games priced${unpricedGames ? ` / ${unpricedGames} awaiting lines` : ""}</div>
+      <div class="projection-hero">
+        <div>
+          <p class="eyebrow">Currently Priced Games</p>
+          <h3>${escapeHtml(leader.owner)} has the strongest odds outlook</h3>
+          <p>Based only on the games that have a live moneyline right now.</p>
+        </div>
+        <div class="projection-hero-total"><span>Wins after priced games</span><strong>${leader.projectedWins.toFixed(1)}</strong></div>
+      </div>
+      <div class="projection-note"><strong>How to read this:</strong> Wins banked + odds expected wins = total after currently priced games. ${pricedGames} team games have moneylines${unpricedGames ? `; ${unpricedGames} remaining games are excluded until lines are posted` : ""}.</div>
       <div class="projection-list">
         ${rows
           .map(
             (row, index) => `
               <article class="projection-row">
-                <div class="projection-owner"><span class="rank">${index + 1}</span><strong>${escapeHtml(row.owner)}</strong></div>
-                <div><span>Current</span><strong>${row.wins}</strong></div>
-                <div><span>Expected</span><strong>+${row.expectedWins.toFixed(1)}</strong></div>
-                <div><span>Projected</span><strong>${row.projectedWins.toFixed(1)}</strong></div>
+                <div class="projection-owner"><span class="rank">${index + 1}</span><div><strong>${escapeHtml(row.owner)}</strong><small>${row.completedGames} team games final</small></div></div>
+                <div><span>Wins banked</span><strong>${row.wins}</strong><small>Final wins</small></div>
+                <div><span>Odds expected</span><strong>+${row.expectedWins.toFixed(1)}</strong><small>${row.pricedGames} games priced</small></div>
+                <div class="projection-total"><span>After priced games</span><strong>${row.projectedWins.toFixed(1)}</strong><small>${row.unpricedGames} games excluded</small></div>
               </article>
             `,
           )
@@ -1244,13 +1255,40 @@ function renderRecaps() {
   els.recapsBoard.innerHTML = recaps.length
     ? recaps
         .map(
-          (recap) => `
-            <article class="recap-card">
-              <div class="recap-week">Week ${escapeHtml(recap.week)}</div>
-              <div><h3>${escapeHtml(recap.title)}</h3><p>${escapeHtml(recap.summary)}</p></div>
-              <span class="pill accent">${escapeHtml(recap.winner_name || "League recap")}</span>
-            </article>
-          `,
+          (recap) => {
+            const weekly = [...(recap.recap_data?.weekly || [])].sort(
+              (a, b) => b.wins - a.wins || b.points - a.points || a.owner.localeCompare(b.owner),
+            );
+            const seasonLeader = recap.recap_data?.standings?.[0];
+            const winner = weekly[0];
+            return `
+              <article class="recap-card">
+                <header class="recap-header">
+                  <div class="recap-week">Week ${escapeHtml(recap.week)}</div>
+                  <div>
+                    <p class="eyebrow">Weekly Winner</p>
+                    <h3>${escapeHtml(recap.winner_name || "League recap")}</h3>
+                    <p>${winner ? `${winner.wins} wins / ${winner.points} points` : escapeHtml(recap.summary)}</p>
+                  </div>
+                  ${seasonLeader ? `<div class="recap-season-leader"><span>Season leader</span><strong>${escapeHtml(seasonLeader.owner)}</strong><small>${seasonLeader.wins} wins / ${seasonLeader.pointsFor} pts</small></div>` : ""}
+                </header>
+                <div class="recap-results" aria-label="Week ${escapeHtml(recap.week)} results">
+                  ${weekly
+                    .map(
+                      (entry, index) => `
+                        <div class="recap-result ${index === 0 ? "winner" : ""}">
+                          <span class="recap-place">${index + 1}</span>
+                          <strong>${escapeHtml(entry.owner)}</strong>
+                          <span>${entry.wins} W</span>
+                          <span>${entry.points} PTS</span>
+                        </div>
+                      `,
+                    )
+                    .join("")}
+                </div>
+              </article>
+            `;
+          },
         )
         .join("")
     : `<div class="notice">The official recap publishes after the Tuesday archive completes.</div>`;
@@ -1306,11 +1344,13 @@ function renderYearToYear() {
     .map((year) => {
       const champion = state.yearlyStandings.get(year)?.[0];
       if (!champion) return "";
+      const gamesTracked = champion.wins + champion.losses + champion.ties;
+      const seasonComplete = gamesTracked >= 102;
       return `
-        <article class="year-champion-card">
-          <p class="eyebrow">${year} Champion</p>
+        <article class="year-champion-card ${seasonComplete ? "" : "in-progress"}">
+          <p class="eyebrow">${year} ${seasonComplete ? "Champion" : "Current Leader"}</p>
           <strong>${escapeHtml(champion.owner)}</strong>
-          <span>${champion.wins} wins / ${champion.pointsFor} pts</span>
+          <span>${champion.wins} wins / ${champion.pointsFor} pts${seasonComplete ? "" : ` / ${gamesTracked} games`}</span>
         </article>
       `;
     })

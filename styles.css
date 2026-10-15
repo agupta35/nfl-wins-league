@@ -683,14 +683,59 @@ h3 {
 }
 
 .projection-note {
+  padding: 11px 13px;
+  border-left: 3px solid var(--gold);
+  background: rgba(247, 195, 68, 0.08);
   color: var(--muted);
   font-size: 0.78rem;
+  line-height: 1.45;
   font-weight: 800;
+}
+
+.projection-note strong { color: var(--text); }
+
+.projection-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--cyan);
+  border-radius: 8px;
+  background: #11161b;
+}
+
+.projection-hero h3 { margin: 3px 0 5px; }
+.projection-hero p:not(.eyebrow) { margin: 0; color: var(--muted); font-size: 0.84rem; }
+
+.projection-hero-total {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.projection-hero-total span,
+.projection-row small,
+.recap-season-leader span,
+.recap-season-leader small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.projection-hero-total strong {
+  color: var(--cyan);
+  font-family: "Oswald", Impact, sans-serif;
+  font-size: 2.2rem;
+  line-height: 0.9;
 }
 
 .projection-row {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) 110px 110px 110px;
+  grid-template-columns: minmax(180px, 1fr) 125px 135px 150px;
   align-items: stretch;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -718,6 +763,9 @@ h3 {
   text-align: left;
 }
 
+.projection-owner > div { min-width: 0; }
+.projection-owner small { display: block; margin-top: 3px; }
+
 .projection-row span {
   color: var(--muted);
   font-size: 0.68rem;
@@ -728,17 +776,25 @@ h3 {
 .projection-row strong { margin-top: 3px; }
 .projection-row .projection-owner strong { margin: 0; }
 .projection-row > div:last-child { background: rgba(57, 229, 140, 0.06); }
+.projection-row small { margin-top: 4px; }
+.projection-row .projection-total strong { color: var(--green); }
 
 .recap-card {
-  display: grid;
-  grid-template-columns: 82px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
-  min-height: 94px;
-  padding: 14px;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #11161b;
+}
+
+.recap-header {
+  display: grid;
+  grid-template-columns: 94px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 100px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(90deg, rgba(247, 195, 68, 0.09), transparent 45%);
 }
 
 .recap-week {
@@ -751,6 +807,61 @@ h3 {
 
 .recap-card h3 { margin: 0 0 5px; }
 .recap-card p { margin: 0; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
+
+.recap-season-leader {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 128px;
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+}
+
+.recap-season-leader strong { margin: 3px 0; color: var(--cyan); }
+
+.recap-results {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.recap-result {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 7px;
+  row-gap: 3px;
+  min-width: 0;
+  padding: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.recap-result:first-child { border-left: 0; }
+.recap-result.winner { background: rgba(57, 229, 140, 0.07); }
+
+.recap-place {
+  grid-row: span 2;
+  color: var(--muted);
+  font-family: "Oswald", Impact, sans-serif;
+  font-size: 1.35rem;
+  text-align: center;
+}
+
+.recap-result.winner .recap-place,
+.recap-result.winner strong { color: var(--green); }
+
+.recap-result strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+
+.recap-result > span:not(.recap-place) {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+}
 
 .admin-dialog {
   width: min(440px, calc(100% - 28px));
@@ -955,6 +1066,13 @@ h3 {
   font-weight: 800;
 }
 
+.year-champion-card.in-progress {
+  border-color: rgba(56, 189, 248, 0.46);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.13), #11161b 68%);
+}
+
+.year-champion-card.in-progress span { color: var(--cyan); }
+
 .all-time-heading {
   display: flex;
   align-items: end;
@@ -1062,7 +1180,7 @@ h3 {
   }
 
   .projection-row {
-    grid-template-columns: minmax(140px, 1fr) 90px 90px 90px;
+    grid-template-columns: minmax(140px, 1fr) 95px 105px 116px;
   }
 
   .leader-row {
@@ -1117,9 +1235,17 @@ h3 {
   .year-champions { grid-template-columns: 1fr; }
   .all-time-row { grid-template-columns: minmax(0, 1fr) 72px 72px; }
   .all-time-owner, .all-time-stat { padding: 8px 6px; }
-  .projection-row { grid-template-columns: minmax(0, 1fr) 64px 76px 78px; }
+  .projection-hero { align-items: flex-start; flex-direction: column; }
+  .projection-hero-total { align-items: flex-start; }
+  .projection-row { grid-template-columns: minmax(0, 1fr) 64px 76px 84px; }
   .projection-row > div { padding: 10px 5px; }
   .projection-row span { font-size: 0.61rem; }
-  .recap-card { grid-template-columns: 64px minmax(0, 1fr); gap: 10px; }
-  .recap-card .pill { display: none; }
+  .projection-row small { font-size: 0.58rem; }
+  .recap-header { grid-template-columns: 64px minmax(0, 1fr); gap: 10px; padding: 12px; }
+  .recap-week { font-size: 1.1rem; }
+  .recap-season-leader { display: none; }
+  .recap-result { grid-template-columns: 16px minmax(0, 1fr); column-gap: 3px; padding: 9px 4px; }
+  .recap-place { font-size: 1.05rem; }
+  .recap-result strong { font-size: 0.67rem; }
+  .recap-result > span:not(.recap-place) { font-size: 0.55rem; }
 }
