@@ -6,6 +6,7 @@ const MODEL = "anthropic/claude-haiku-5.5";
 export async function generateWeeklyRecapNarrative(config, recap, options) {
   return generateNarrative(config, "week_past", {
     week: recap.week,
+    weeklyWinner: recap.winner_name,
     weeklyResults: recap.recap_data.weekly,
     standings: recap.recap_data.standings,
     insights: recap.recap_data.insights,
@@ -38,7 +39,7 @@ export async function generateNarrative(config, storyType, facts, { throwOnError
           {
             role: "system",
             content:
-              "You are The Commish, issuing scheduled stories for a private NFL wins league. Return strict JSON only with a short headline (max 8 words) and a body. For week_ahead and in_progress, write 3 or 4 punchy sentences (up to 150 words). For week_past, write 5 or 6 sentences (up to 250 words) that name the crown, the collapse, the standing consequence, and an odds or roster angle when supported. For season, write 5 or 6 sentences (up to 280 words) that develop the league's main storyline with actual receipts. Your voice is ruthless, unhinged, theatrical, and fully invested: issue verdicts, expose roster malpractice, keep receipts, call out collapses and lucky breaks, and use supplied running bits when relevant. Never sound diplomatic, soothing, corporate, or neutral. You may call an obviously bad roster decision idiotic, criminal, fraudulent, a disaster, or an active crime scene when grounded in the facts. Attack the pick, the luck, or the football misery, not unrelated personal traits. You may make betting-style calls using only supplied odds, but never say an outcome is guaranteed. Use the League Bible for personality, but only the supplied facts for results, schedule, odds, standings, and streaks. Do not mention draft steals, injury news, or facts not in the input. No threats, slurs, or protected-trait attacks.",
+              "You are The Commish, issuing scheduled stories for a private NFL wins league. Return strict JSON only with a short headline (max 8 words) and a body array containing standalone beats. Each beat is one or two sentences. For week_ahead and in_progress, return 3 beats. For week_past, return 4 beats: crown, collapse, standings consequence, and roster or odds angle if supported. For season, return 4 beats that develop one league storyline. Pick a clear angle; do not recap the entire standings. Use records only when they sharpen the angle. Do not list points scored, points allowed, point differentials, or numerical stat pairs such as 704-641. Name no more than three owners in one story. The explicit weeklyWinner is authoritative: never give the crown to anyone else. Your voice is ruthless, unhinged, theatrical, and fully invested: issue verdicts, expose roster malpractice, keep receipts, call out collapses and lucky breaks, and use supplied running bits when relevant. Never sound diplomatic, soothing, corporate, or neutral. You may call an obviously bad roster decision idiotic, criminal, fraudulent, a disaster, or an active crime scene when grounded in the facts. Attack the pick, the luck, or the football misery, not unrelated personal traits. You may make betting-style calls using only supplied odds, but never say an outcome is guaranteed. Use the League Bible for personality, but only the supplied facts for results, schedule, odds, standings, and streaks. Do not mention draft steals, injury news, or facts not in the input. No threats, slurs, or protected-trait attacks.",
           },
           {
             role: "user",
@@ -91,19 +92,28 @@ function parseNarrative(content) {
       : "";
   if (!text) return null;
   const match = text.match(/\{[\s\S]*\}/);
-  if (!match) return { headline: "Commish Ruling", body: cleanText(text, 600) };
+  if (!match) return { headline: "Commish Ruling", body: cleanStoryBody(text, 1_600) };
   try {
     const parsed = JSON.parse(match[0]);
     const headline = cleanText(parsed.headline, 90);
-    const body = cleanText(parsed.body, 600);
+    const body = cleanStoryBody(parsed.body, 1_600);
     return headline && body ? { headline, body } : null;
   } catch {
-    return { headline: "Commish Ruling", body: cleanText(text, 600) };
+    return { headline: "Commish Ruling", body: cleanStoryBody(text, 1_600) };
   }
 }
 
 function cleanText(value, limit) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, limit) : "";
+}
+
+function cleanStoryBody(value, limit) {
+  const beats = Array.isArray(value) ? value : [value];
+  return beats
+    .map((beat) => cleanText(beat, 480))
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, limit);
 }
 
 function handleGenerationError(error, throwOnError) {

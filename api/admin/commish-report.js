@@ -23,7 +23,7 @@ export default async function handler(request, response) {
     if (storyType === "week_past" || storyType === "season") {
       const recapResponse = await supabaseRequest(
         config,
-        `/rest/v1/weekly_recaps?select=season,week,recap_data&season=eq.${season}&published=eq.true&order=week.desc&limit=1`,
+        `/rest/v1/weekly_recaps?select=season,week,winner_name,recap_data&season=eq.${season}&published=eq.true&order=week.desc&limit=1`,
       );
       const [recap] = await recapResponse.json();
       if (!recap) return sendJson(response, 404, { error: "Archive a completed week before publishing this report" });

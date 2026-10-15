@@ -966,7 +966,7 @@ function renderLeaguePulse(model) {
 
   els.leaguePulse.innerHTML = `
     <div class="pulse-kicker"><span class="pulse-live-dot"></span>${escapeHtml(content.type)}</div>
-    <div class="pulse-copy"><p class="eyebrow">League Pulse</p><h2>${escapeHtml(content.headline)}</h2><p>${escapeHtml(content.body)}</p></div>
+    <div class="pulse-copy"><p class="eyebrow">League Pulse</p><h2>${escapeHtml(content.headline)}</h2>${renderStoryBeats(content.body)}</div>
     <div class="pulse-stamp">${state.season}<br /><span>WEEK ${state.currentWeek}</span></div>
   `;
 }
@@ -982,7 +982,7 @@ function renderSeasonStory(model) {
       : "";
     return;
   }
-  els.seasonStory.innerHTML = `<span>Season thread</span><strong>${escapeHtml(story.headline)}</strong><p>${escapeHtml(story.body)}</p>`;
+  els.seasonStory.innerHTML = `<span>Season thread</span><strong>${escapeHtml(story.headline)}</strong>${renderStoryBeats(story.body)}`;
 }
 
 function selectPulseStory() {
@@ -1363,7 +1363,7 @@ function renderRecaps() {
                   </div>
                   ${seasonLeader ? `<div class="recap-season-leader"><span>Season leader</span><strong>${escapeHtml(seasonLeader.owner)}</strong><small>${seasonLeader.wins} wins / ${seasonLeader.pointsFor} pts</small></div>` : ""}
                 </header>
-                ${narrative ? `<div class="recap-narrative"><p class="eyebrow">Commissioner Report</p><h4>${escapeHtml(narrative.headline)}</h4><p>${escapeHtml(narrative.body)}</p></div>` : ""}
+                ${narrative ? `<div class="recap-narrative"><p class="eyebrow">Commissioner Report</p><h4>${escapeHtml(narrative.headline)}</h4>${renderStoryBeats(narrative.body)}</div>` : ""}
                 <div class="recap-results" aria-label="Week ${escapeHtml(recap.week)} results">
                   ${weekly
                     .map(
@@ -1385,6 +1385,17 @@ function renderRecaps() {
         )
         .join("")
     : `<div class="notice">The official recap publishes after the Tuesday archive completes.</div>`;
+}
+
+function renderStoryBeats(body) {
+  const paragraphs = String(body || "")
+    .split(/\n\s*\n/)
+    .map((beat) => beat.trim())
+    .filter(Boolean);
+  const beats = paragraphs.length > 1
+    ? paragraphs
+    : (paragraphs[0]?.match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g) || []).map((beat) => beat.trim()).filter(Boolean);
+  return `<div class="story-beats">${(beats.length ? beats : ["No ruling has been published."]).map((beat) => `<p>${escapeHtml(beat)}</p>`).join("")}</div>`;
 }
 
 function buildClientRecapInsights(weekly, standings) {

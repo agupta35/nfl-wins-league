@@ -169,7 +169,8 @@ h3 {
 
 .pulse-live-dot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(57, 229, 140, 0.12); }
 .pulse-copy h2 { margin: 3px 0 7px; font-family: "Oswald", Impact, sans-serif; font-size: 1.5rem; letter-spacing: 0; }
-.pulse-copy p:not(.eyebrow) { max-width: 920px; margin: 0; color: var(--muted); line-height: 1.45; }
+.story-beats { display: grid; gap: 7px; }
+.story-beats p { max-width: 920px; margin: 0; color: var(--muted); line-height: 1.45; }
 .pulse-stamp { padding-left: 18px; border-left: 1px solid var(--line); text-align: right; font-size: 1.25rem; }
 .pulse-stamp span { color: var(--muted); font-family: "Roboto", sans-serif; font-size: 0.64rem; font-weight: 800; }
 
@@ -278,7 +279,8 @@ h3 {
 }
 
 .season-story strong { display: block; margin-top: 3px; font-size: 0.88rem; }
-.season-story p { margin: 4px 0 0; color: var(--muted); font-size: 0.77rem; line-height: 1.4; }
+.season-story .story-beats { margin-top: 5px; gap: 5px; }
+.season-story .story-beats p { font-size: 0.77rem; line-height: 1.4; }
 
 .leader-row {
   display: grid;
@@ -881,7 +883,8 @@ h3 {
 }
 
 .recap-narrative h4 { margin: 3px 0 5px; color: var(--cyan); font-family: "Oswald", Impact, sans-serif; font-size: 1.05rem; letter-spacing: 0; }
-.recap-narrative p { margin: 0; color: #d9e6ee; line-height: 1.5; }
+.recap-narrative .story-beats { gap: 8px; }
+.recap-narrative .story-beats p { color: #d9e6ee; line-height: 1.5; }
 
 .recap-insights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); }
 .recap-insights > div { min-width: 0; padding: 11px 12px; border-left: 1px solid var(--line); }
