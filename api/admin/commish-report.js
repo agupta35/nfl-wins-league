@@ -29,7 +29,7 @@ export default async function handler(request, response) {
       if (!recap) return sendJson(response, 404, { error: "Archive a completed week before publishing this report" });
 
       if (storyType === "season") {
-        const narrative = await generateSeasonStory(config, season, recap.week, recap.recap_data.standings || []);
+      const narrative = await generateSeasonStory(config, season, recap.week, recap.recap_data.standings || [], { throwOnError: true });
         if (!narrative) return sendJson(response, 502, { error: "The Commish could not generate a report" });
         await saveStory(config, {
           season,
@@ -41,7 +41,7 @@ export default async function handler(request, response) {
         return sendJson(response, 200, { week: recap.week, storyType, headline: narrative.headline, publishedBy: admin.email });
       }
 
-      const narrative = await generateWeeklyRecapNarrative(config, recap);
+      const narrative = await generateWeeklyRecapNarrative(config, recap, { throwOnError: true });
       if (!narrative) return sendJson(response, 502, { error: "The Commish could not generate a report" });
       const recapData = { ...recap.recap_data, aiNarrative: narrative };
       await supabaseRequest(config, `/rest/v1/weekly_recaps?season=eq.${season}&week=eq.${recap.week}`, {
@@ -54,12 +54,15 @@ export default async function handler(request, response) {
 
     const liveStoryType = storyType === "in_progress" ? "in_progress" : "week_ahead";
     const live = await loadLiveStoryFacts(config, liveStoryType);
-    const narrative = await generateNarrative(config, liveStoryType, live.facts);
+    const narrative = await generateNarrative(config, liveStoryType, live.facts, { throwOnError: true });
     if (!narrative) return sendJson(response, 502, { error: "The Commish could not generate a report" });
     await saveStory(config, { ...live, storyType: liveStoryType, ...narrative });
     return sendJson(response, 200, { week: live.week, storyType: liveStoryType, headline: narrative.headline, publishedBy: admin.email });
   } catch (error) {
     console.error(error);
-    return sendJson(response, 502, { error: "The Commish could not publish the report" });
+    const message = error instanceof Error && error.message.startsWith("AI Gateway")
+      ? `The AI Gateway rejected the request: ${error.message.slice(0, 520)}`
+      : "The Commish could not publish the report";
+    return sendJson(response, 502, { error: message });
   }
 }

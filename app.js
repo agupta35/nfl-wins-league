@@ -426,7 +426,7 @@ async function publishCommishReport(storyType = "week_past") {
     await loadLeagueData();
   } catch (error) {
     console.error(error);
-    els.adminDetail.textContent = "The Commish report could not be published.";
+    els.adminDetail.textContent = error.message || "The Commish report could not be published.";
   }
 }
 

@@ -3,22 +3,22 @@ import { supabaseRequest } from "./_supabase.js";
 const AI_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions";
 const MODEL = "anthropic/claude-haiku-5.5";
 
-export async function generateWeeklyRecapNarrative(config, recap) {
+export async function generateWeeklyRecapNarrative(config, recap, options) {
   return generateNarrative(config, "week_past", {
     week: recap.week,
     weeklyResults: recap.recap_data.weekly,
     standings: recap.recap_data.standings,
     insights: recap.recap_data.insights,
-  });
+  }, options);
 }
 
-export async function generateSeasonStory(config, season, week, standings) {
-  return generateNarrative(config, "season", { season, week, standings });
+export async function generateSeasonStory(config, season, week, standings, options) {
+  return generateNarrative(config, "season", { season, week, standings }, options);
 }
 
-export async function generateNarrative(config, storyType, facts) {
+export async function generateNarrative(config, storyType, facts, { throwOnError = false } = {}) {
   const apiKey = process.env.AI_GATEWAY_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) return handleGenerationError(new Error("AI Gateway key is not configured"), throwOnError);
 
   try {
     const context = await loadStoryContext(config);
@@ -45,12 +45,14 @@ export async function generateNarrative(config, storyType, facts) {
         ],
       }),
     });
-    if (!response.ok) throw new Error(`AI Gateway ${response.status}`);
-    const result = await response.json();
-    return parseNarrative(result.choices?.[0]?.message?.content);
+    const responseText = await response.text();
+    if (!response.ok) throw new Error(`AI Gateway ${response.status}: ${responseText.slice(0, 400)}`);
+    const result = JSON.parse(responseText);
+    const narrative = parseNarrative(result.choices?.[0]?.message?.content);
+    if (!narrative) throw new Error("AI Gateway returned no usable Commish text");
+    return narrative;
   } catch (error) {
-    console.error("Story generation failed", error);
-    return null;
+    return handleGenerationError(error, throwOnError);
   }
 }
 
@@ -80,19 +82,31 @@ async function loadStoryContext(config) {
 }
 
 function parseNarrative(content) {
-  if (typeof content !== "string") return null;
-  const match = content.match(/\{[\s\S]*\}/);
-  if (!match) return null;
+  const text = Array.isArray(content)
+    ? content.map((part) => part?.text || "").join(" ")
+    : typeof content === "string"
+      ? content
+      : "";
+  if (!text) return null;
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return { headline: "Commish Ruling", body: cleanText(text, 600) };
   try {
     const parsed = JSON.parse(match[0]);
     const headline = cleanText(parsed.headline, 90);
     const body = cleanText(parsed.body, 600);
     return headline && body ? { headline, body } : null;
   } catch {
-    return null;
+    return { headline: "Commish Ruling", body: cleanText(text, 600) };
   }
 }
 
 function cleanText(value, limit) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, limit) : "";
+}
+
+function handleGenerationError(error, throwOnError) {
+  const message = error instanceof Error ? error.message : "Unknown AI Gateway error";
+  console.error(`Story generation failed: ${message}`);
+  if (throwOnError) throw new Error(message);
+  return null;
 }
