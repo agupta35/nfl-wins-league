@@ -238,6 +238,7 @@ function bindEvents() {
   els.adminActions.addEventListener("click", async (event) => {
     const action = event.target.closest("[data-admin-action]")?.dataset.adminAction;
     if (action === "archive") await archiveWeek();
+    if (action === "commish-report") await publishCommishReport(event.target.closest("[data-commish-story]")?.dataset.commishStory);
     if (action === "signout") await signOutAdmin();
   });
 
@@ -359,6 +360,10 @@ async function openAdminDialog() {
   renderAdminRosterEditor();
   els.adminActions.innerHTML = `
     <button class="control-button" type="button" data-admin-action="archive">Archive completed week</button>
+    <button class="ghost-button" type="button" data-admin-action="commish-report" data-commish-story="week_past">Publish Week Past</button>
+    <button class="ghost-button" type="button" data-admin-action="commish-report" data-commish-story="week_ahead">Publish Week Ahead</button>
+    <button class="ghost-button" type="button" data-admin-action="commish-report" data-commish-story="in_progress">Publish Live Update</button>
+    <button class="ghost-button" type="button" data-admin-action="commish-report" data-commish-story="season">Publish Season Story</button>
     <button class="ghost-button" type="button" data-admin-action="signout">Sign out</button>
   `;
   els.adminDialog.showModal();
@@ -399,6 +404,29 @@ async function archiveWeek() {
   } catch (error) {
     console.error(error);
     els.adminDetail.textContent = "Archive could not be completed.";
+  }
+}
+
+async function publishCommishReport(storyType = "week_past") {
+  const { data } = await state.supabaseClient.auth.getSession();
+  if (!data.session) return;
+  els.adminDetail.textContent = "The Commish is preparing the ruling.";
+  try {
+    const response = await fetch("/api/admin/commish-report", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${data.session.access_token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ season: state.season, storyType }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Commish report failed");
+    els.adminDetail.textContent = `Week ${result.week} ${result.storyType.replace("_", " ")} published: ${result.headline}`;
+    await loadLeagueData();
+  } catch (error) {
+    console.error(error);
+    els.adminDetail.textContent = "The Commish report could not be published.";
   }
 }
 
