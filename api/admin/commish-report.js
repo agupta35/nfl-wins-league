@@ -12,7 +12,9 @@ export default async function handler(request, response) {
     const admin = await requireAdmin(config, request);
     if (!admin) return sendJson(response, 403, { error: "Administrator access required" });
 
-    const { season, storyType = "week_past" } = request.body || {};
+    const body = typeof request.body === "string" ? JSON.parse(request.body) : request.body;
+    const season = Number(body?.season);
+    const storyType = body?.storyType || "week_past";
     if (!Number.isInteger(season)) return sendJson(response, 400, { error: "A valid season is required" });
     if (!["week_past", "week_ahead", "in_progress", "season"].includes(storyType)) {
       return sendJson(response, 400, { error: "An eligible Commish story type is required" });
