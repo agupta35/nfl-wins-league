@@ -1,9 +1,10 @@
+import { generateSeasonStory, generateWeeklyRecapNarrative, saveStory } from "./_stories.js";
 import { supabaseRequest } from "./_supabase.js";
 
 const ESPN_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 const WEEKS = Array.from({ length: 18 }, (_, index) => index + 1);
 
-export async function archiveCurrentSeason(config) {
+export async function archiveCurrentSeason(config, { includeAiNarrative = false } = {}) {
   const currentBoard = await fetchScoreboard();
   const season = Number(currentBoard.season?.year);
   if (!Number.isInteger(season)) throw new Error("ESPN did not return a season");
@@ -57,15 +58,48 @@ export async function archiveCurrentSeason(config) {
     body: JSON.stringify(snapshots),
   });
 
-  const recaps = completedWeeks.map((week) =>
+  const weeklyResults = new Map(
+    completedWeeks.map((week) => [week, buildWeeklyResults(rosters, archivedGames.filter((game) => game.week === week))]),
+  );
+  const recaps = completedWeeks.map((week, index) =>
     buildRecap(
       season,
       week,
-      rosters,
-      archivedGames.filter((game) => game.week === week),
+      weeklyResults.get(week),
       calculateStandings(rosters, archivedGames.filter((game) => game.week <= week)),
+      completedWeeks.slice(0, index + 1).map((priorWeek) => weeklyResults.get(priorWeek)),
     ),
   );
+  const existingRecapsResponse = await supabaseRequest(
+    config,
+    `/rest/v1/weekly_recaps?select=week,recap_data&season=eq.${season}`,
+  );
+  const existingRecaps = await existingRecapsResponse.json();
+  const existingNarratives = new Map(
+    existingRecaps.map((recap) => [recap.week, recap.recap_data?.aiNarrative]).filter(([, narrative]) => narrative),
+  );
+  recaps.forEach((recap) => {
+    const previousNarrative = existingNarratives.get(recap.week);
+    if (previousNarrative) recap.recap_data.aiNarrative = previousNarrative;
+  });
+
+  if (includeAiNarrative && recaps.length) {
+    const latestRecap = recaps.at(-1);
+    const narrative = await generateWeeklyRecapNarrative(config, latestRecap);
+    if (narrative) latestRecap.recap_data.aiNarrative = narrative;
+
+    const seasonNarrative = await generateSeasonStory(config, season, latestRecap.week, latestRecap.recap_data.standings);
+    if (seasonNarrative) {
+      await saveStory(config, {
+        season,
+        week: latestRecap.week,
+        storyType: "season",
+        ...seasonNarrative,
+        facts: { standings: latestRecap.recap_data.standings, week: latestRecap.week },
+      });
+    }
+  }
+
   await supabaseRequest(config, "/rest/v1/weekly_recaps?on_conflict=season,week", {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -75,7 +109,7 @@ export async function archiveCurrentSeason(config) {
   return { season, archivedGames: finalGames.length, snapshotWeek, recap: recaps.at(-1)?.title };
 }
 
-async function fetchScoreboard(week, season) {
+export async function fetchScoreboard(week, season) {
   const url = new URL(ESPN_SCOREBOARD_URL);
   url.searchParams.set("seasontype", "2");
   if (week) {
@@ -107,7 +141,7 @@ function normalizeArchivedGame(event, season, week) {
   };
 }
 
-function calculateStandings(rosters, games) {
+export function calculateStandings(rosters, games) {
   const ownerByTeam = new Map(rosters.map((row) => [row.team_abbreviation, row.owner_name]));
   const rows = Array.from(new Set(rosters.map((row) => row.owner_name))).map((owner) => ({
     owner,
@@ -145,9 +179,11 @@ function calculateStandings(rosters, games) {
   );
 }
 
-function buildRecap(season, week, rosters, weekGames, standings) {
+function buildWeeklyResults(rosters, weekGames) {
   const ownerByTeam = new Map(rosters.map((row) => [row.team_abbreviation, row.owner_name]));
-  const weekly = new Map(standings.map((row) => [row.owner, { owner: row.owner, wins: 0, points: 0 }]));
+  const weekly = new Map(
+    Array.from(new Set(rosters.map((row) => row.owner_name))).map((owner) => [owner, { owner, wins: 0, losses: 0, points: 0 }]),
+  );
   weekGames.forEach((game) => {
     [
       { team: game.away_team, score: game.away_score, opponentScore: game.home_score },
@@ -158,9 +194,14 @@ function buildRecap(season, week, rosters, weekGames, standings) {
       const row = weekly.get(owner);
       row.points += score;
       if (score > opponentScore) row.wins += 1;
+      if (score < opponentScore) row.losses += 1;
     });
   });
-  const winner = [...weekly.values()].sort((a, b) => b.wins - a.wins || b.points - a.points || a.owner.localeCompare(b.owner))[0];
+  return [...weekly.values()].sort((a, b) => b.wins - a.wins || b.points - a.points || a.owner.localeCompare(b.owner));
+}
+
+function buildRecap(season, week, weekly, standings, weeklyHistory) {
+  const winner = weekly[0];
   const leader = standings[0];
   return {
     season,
@@ -168,9 +209,54 @@ function buildRecap(season, week, rosters, weekGames, standings) {
     title: `Week ${week}: ${winner.owner} takes the weekly crown`,
     summary: `${winner.owner} finished the week with ${winner.wins} wins and ${winner.points} points. ${leader.owner} leads the season with ${leader.wins} wins and ${leader.pointsFor} points.`,
     winner_name: winner.owner,
-    recap_data: { weekly: [...weekly.values()], standings },
+    recap_data: { weekly, standings, insights: buildRecapInsights(weekly, standings, weeklyHistory) },
     published: true,
     generated_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
+}
+
+function buildRecapInsights(weekly, standings, weeklyHistory) {
+  const winner = weekly[0];
+  const highScore = [...weekly].sort((a, b) => b.points - a.points || b.wins - a.wins)[0];
+  const scoringEdge = [...standings]
+    .map((entry) => ({ ...entry, differential: entry.pointsFor - entry.pointsAgainst }))
+    .sort((a, b) => b.differential - a.differential || b.pointsFor - a.pointsFor)[0];
+  const coldStreak = standings
+    .map((entry) => ({
+      owner: entry.owner,
+      weeks: trailingLosingWeeks(entry.owner, weeklyHistory),
+    }))
+    .sort((a, b) => b.weeks - a.weeks || a.owner.localeCompare(b.owner))[0];
+
+  const insights = [
+    { label: "Weekly power", detail: `${winner.owner} took the week with ${winner.wins} wins and ${winner.points} points.` },
+    {
+      label: "Scoring edge",
+      detail:
+        scoringEdge.differential >= 0
+          ? `${scoringEdge.owner} has the league's best point differential at +${scoringEdge.differential}.`
+          : `${scoringEdge.owner} has the league's best point differential at ${scoringEdge.differential}.`,
+    },
+  ];
+
+  if (coldStreak.weeks >= 2) {
+    insights.push({ label: "Cold streak", detail: `${coldStreak.owner} has posted a losing weekly record ${coldStreak.weeks} weeks in a row.` });
+  } else if (highScore.owner !== winner.owner) {
+    insights.push({ label: "High score", detail: `${highScore.owner} led all rosters with ${highScore.points} points, despite not taking the weekly crown.` });
+  } else {
+    insights.push({ label: "Complete performance", detail: `${winner.owner} paired the weekly crown with the week's top scoring total.` });
+  }
+
+  return insights;
+}
+
+function trailingLosingWeeks(owner, weeklyHistory) {
+  let streak = 0;
+  for (const week of [...weeklyHistory].reverse()) {
+    const result = week.find((entry) => entry.owner === owner);
+    if (!result || result.losses <= result.wins) break;
+    streak += 1;
+  }
+  return streak;
 }

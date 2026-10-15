@@ -118,6 +118,7 @@ const state = {
   yearlyStandings: null,
   yearlyIsLoading: false,
   recaps: [],
+  stories: [],
   supabaseClient: null,
   admin: null,
   adminConfigReady: false,
@@ -136,7 +137,9 @@ const els = {
   liveGamesValue: document.querySelector("#liveGamesValue"),
   finalGamesValue: document.querySelector("#finalGamesValue"),
   lastSyncValue: document.querySelector("#lastSyncValue"),
+  leaguePulse: document.querySelector("#leaguePulse"),
   leaderboard: document.querySelector("#leaderboard"),
+  seasonStory: document.querySelector("#seasonStory"),
   leaderName: document.querySelector("#leaderName"),
   leaderRecord: document.querySelector("#leaderRecord"),
   leaderTeams: document.querySelector("#leaderTeams"),
@@ -294,6 +297,7 @@ async function loadLeagueData() {
       buildSeasonSelect();
     }
     state.recaps = data.recaps || [];
+    state.stories = data.stories || [];
   } catch (error) {
     console.warn("Using local league fallback", error);
   } finally {
@@ -576,7 +580,9 @@ function normalizeGame(event) {
 function render() {
   const model = buildLeagueModel();
   renderSummary(model);
+  renderLeaguePulse(model);
   renderLeaderboard(model);
+  renderSeasonStory(model);
   renderChampion(model);
   renderWeekly(model);
   renderRosters(model);
@@ -909,6 +915,61 @@ function renderLeaderboard(model) {
       `,
     )
     .join("");
+}
+
+function renderLeaguePulse(model) {
+  const story = selectPulseStory();
+  const latestRecap = latestRecapForSeason();
+  const narrative = latestRecap?.recap_data?.aiNarrative;
+  const fallback = latestRecap
+    ? {
+        type: "Week Past",
+        headline: latestRecap.title,
+        body: narrative?.body || latestRecap.summary,
+      }
+    : {
+        type: "League Pulse",
+        headline: model.standings[0] ? `${model.standings[0].owner} owns the board` : "Season feed loading",
+        body: "Live scores, standings, and the first league story will land here as the week develops.",
+      };
+  const content = story
+    ? { type: storyLabel(story.story_type), headline: story.headline, body: story.body }
+    : fallback;
+
+  els.leaguePulse.innerHTML = `
+    <div class="pulse-kicker"><span class="pulse-live-dot"></span>${escapeHtml(content.type)}</div>
+    <div class="pulse-copy"><p class="eyebrow">League Pulse</p><h2>${escapeHtml(content.headline)}</h2><p>${escapeHtml(content.body)}</p></div>
+    <div class="pulse-stamp">${state.season}<br /><span>WEEK ${state.currentWeek}</span></div>
+  `;
+}
+
+function renderSeasonStory(model) {
+  const story = state.stories.find(
+    (item) => Number(item.season) === state.season && item.story_type === "season",
+  );
+  if (!story) {
+    const leader = model.standings[0];
+    els.seasonStory.innerHTML = leader
+      ? `<span>Season thread</span><strong>${escapeHtml(leader.owner)} leads on ${leader.wins} wins.</strong>`
+      : "";
+    return;
+  }
+  els.seasonStory.innerHTML = `<span>Season thread</span><strong>${escapeHtml(story.headline)}</strong><p>${escapeHtml(story.body)}</p>`;
+}
+
+function selectPulseStory() {
+  const stories = state.stories.filter((story) => Number(story.season) === state.season && Number(story.week) === state.currentWeek);
+  return stories.find((story) => story.story_type === "in_progress") || stories.find((story) => story.story_type === "week_ahead") || null;
+}
+
+function latestRecapForSeason() {
+  return state.recaps
+    .filter((recap) => Number(recap.season) === state.season)
+    .sort((a, b) => Number(b.week) - Number(a.week))[0];
+}
+
+function storyLabel(storyType) {
+  return storyType === "in_progress" ? "In Progress" : storyType === "week_ahead" ? "Week Ahead" : "Season Story";
 }
 
 function renderChampion(model) {
@@ -1261,6 +1322,8 @@ function renderRecaps() {
             );
             const seasonLeader = recap.recap_data?.standings?.[0];
             const winner = weekly[0];
+            const narrative = recap.recap_data?.aiNarrative;
+            const insights = recap.recap_data?.insights || buildClientRecapInsights(weekly, recap.recap_data?.standings || []);
             return `
               <article class="recap-card">
                 <header class="recap-header">
@@ -1272,6 +1335,7 @@ function renderRecaps() {
                   </div>
                   ${seasonLeader ? `<div class="recap-season-leader"><span>Season leader</span><strong>${escapeHtml(seasonLeader.owner)}</strong><small>${seasonLeader.wins} wins / ${seasonLeader.pointsFor} pts</small></div>` : ""}
                 </header>
+                ${narrative ? `<div class="recap-narrative"><p class="eyebrow">Commissioner Report</p><h4>${escapeHtml(narrative.headline)}</h4><p>${escapeHtml(narrative.body)}</p></div>` : ""}
                 <div class="recap-results" aria-label="Week ${escapeHtml(recap.week)} results">
                   ${weekly
                     .map(
@@ -1286,12 +1350,27 @@ function renderRecaps() {
                     )
                     .join("")}
                 </div>
+                ${insights.length ? `<div class="recap-insights">${insights.map((insight) => `<div><span>${escapeHtml(insight.label)}</span><p>${escapeHtml(insight.detail)}</p></div>`).join("")}</div>` : ""}
               </article>
             `;
           },
         )
         .join("")
     : `<div class="notice">The official recap publishes after the Tuesday archive completes.</div>`;
+}
+
+function buildClientRecapInsights(weekly, standings) {
+  if (!weekly.length || !standings.length) return [];
+  const winner = weekly[0];
+  const highScore = [...weekly].sort((a, b) => b.points - a.points || b.wins - a.wins)[0];
+  const scoringEdge = [...standings]
+    .map((entry) => ({ ...entry, differential: entry.pointsFor - entry.pointsAgainst }))
+    .sort((a, b) => b.differential - a.differential || b.pointsFor - a.pointsFor)[0];
+  return [
+    { label: "Weekly power", detail: `${winner.owner} took the crown with ${winner.wins} wins and ${winner.points} points.` },
+    { label: "Scoring edge", detail: `${scoringEdge.owner} owns the best point differential at ${scoringEdge.differential >= 0 ? "+" : ""}${scoringEdge.differential}.` },
+    { label: "Top total", detail: `${highScore.owner} put up ${highScore.points} points for the week.` },
+  ];
 }
 
 function renderScheduleGameList(games, emptyMessage) {

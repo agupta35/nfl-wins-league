@@ -10,7 +10,7 @@ export default async function handler(request, response) {
   if (!config) return sendJson(response, 503, { error: "Supabase is not configured" });
 
   try {
-    return sendJson(response, 200, await archiveCurrentSeason(config));
+    return sendJson(response, 200, await archiveCurrentSeason(config, { includeAiNarrative: true }));
   } catch (error) {
     console.error(error);
     return sendJson(response, 502, { error: "Archive failed" });

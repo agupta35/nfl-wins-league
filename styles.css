@@ -142,6 +142,37 @@ h3 {
   margin-bottom: 18px;
 }
 
+.league-pulse {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr) 84px;
+  gap: 18px;
+  align-items: center;
+  min-height: 126px;
+  margin-bottom: 16px;
+  padding: 18px 20px;
+  overflow: hidden;
+  border: 1px solid rgba(245, 200, 76, 0.52);
+  border-radius: 8px;
+  background: linear-gradient(105deg, rgba(245, 200, 76, 0.13), rgba(56, 189, 248, 0.08) 48%, rgba(57, 229, 140, 0.08));
+  box-shadow: var(--shadow);
+}
+
+.pulse-kicker,
+.pulse-stamp {
+  color: var(--gold);
+  font-family: "Oswald", Impact, sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.pulse-live-dot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(57, 229, 140, 0.12); }
+.pulse-copy h2 { margin: 3px 0 7px; font-family: "Oswald", Impact, sans-serif; font-size: 1.5rem; letter-spacing: 0; }
+.pulse-copy p:not(.eyebrow) { max-width: 920px; margin: 0; color: var(--muted); line-height: 1.45; }
+.pulse-stamp { padding-left: 18px; border-left: 1px solid var(--line); text-align: right; font-size: 1.25rem; }
+.pulse-stamp span { color: var(--muted); font-family: "Roboto", sans-serif; font-size: 0.64rem; font-weight: 800; }
+
 .stat-tile,
 .leaderboard-panel,
 .champion-panel,
@@ -229,6 +260,25 @@ h3 {
   display: grid;
   gap: 10px;
 }
+
+.season-story {
+  margin: 0 0 12px;
+  padding: 11px 12px;
+  border-left: 3px solid var(--cyan);
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.season-story span,
+.recap-insights span {
+  display: block;
+  color: var(--cyan);
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.season-story strong { display: block; margin-top: 3px; font-size: 0.88rem; }
+.season-story p { margin: 4px 0 0; color: var(--muted); font-size: 0.77rem; line-height: 1.4; }
 
 .leader-row {
   display: grid;
@@ -824,6 +874,20 @@ h3 {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.recap-narrative {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(56, 189, 248, 0.045);
+}
+
+.recap-narrative h4 { margin: 3px 0 5px; color: var(--cyan); font-family: "Oswald", Impact, sans-serif; font-size: 1.05rem; letter-spacing: 0; }
+.recap-narrative p { margin: 0; color: #d9e6ee; line-height: 1.5; }
+
+.recap-insights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+.recap-insights > div { min-width: 0; padding: 11px 12px; border-left: 1px solid var(--line); }
+.recap-insights > div:first-child { border-left: 0; }
+.recap-insights p { margin: 4px 0 0; color: var(--muted); font-size: 0.74rem; line-height: 1.4; }
+
 .recap-result {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
@@ -1175,6 +1239,9 @@ h3 {
     grid-template-columns: 1fr;
   }
 
+  .league-pulse { grid-template-columns: 1fr; gap: 9px; }
+  .pulse-stamp { display: none; }
+
   .schedule-owner-grid {
     grid-template-columns: 1fr;
   }
@@ -1248,4 +1315,7 @@ h3 {
   .recap-place { font-size: 1.05rem; }
   .recap-result strong { font-size: 0.67rem; }
   .recap-result > span:not(.recap-place) { font-size: 0.55rem; }
+  .recap-insights { grid-template-columns: 1fr; }
+  .recap-insights > div { border-top: 1px solid var(--line); border-left: 0; }
+  .recap-insights > div:first-child { border-top: 0; }
 }
