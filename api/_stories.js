@@ -1,7 +1,7 @@
 import { supabaseRequest } from "./_supabase.js";
 
 const AI_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions";
-const MODEL = "anthropic/claude-sonnet-5.5";
+const MODEL = "anthropic/claude-haiku-5.5";
 
 export async function generateWeeklyRecapNarrative(config, recap, options) {
   return generateNarrative(config, "week_past", {
