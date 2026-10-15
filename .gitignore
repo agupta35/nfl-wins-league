@@ -4,3 +4,6 @@ playwright-report/
 test-results/
 .vercel
 supabase/.temp/
+.env
+.env.*
+.env*.local

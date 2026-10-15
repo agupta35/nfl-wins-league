@@ -674,10 +674,133 @@ h3 {
 .yearly-board,
 .all-time-list,
 .schedule-impact-board,
-.schedule-game-list {
+.schedule-game-list,
+.projections-board,
+.projection-list,
+.recaps-board {
   display: grid;
   gap: 10px;
 }
+
+.projection-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.projection-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 110px 110px 110px;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #11161b;
+}
+
+.projection-row > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 12px;
+  border-left: 1px solid var(--line);
+  text-align: center;
+}
+
+.projection-row > div:first-child {
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 10px;
+  border-left: 0;
+  background: rgba(56, 189, 248, 0.06);
+  text-align: left;
+}
+
+.projection-row span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.projection-row strong { margin-top: 3px; }
+.projection-row .projection-owner strong { margin: 0; }
+.projection-row > div:last-child { background: rgba(57, 229, 140, 0.06); }
+
+.recap-card {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 94px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #11161b;
+}
+
+.recap-week {
+  color: var(--gold);
+  font-family: "Oswald", Impact, sans-serif;
+  font-size: 1.3rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.recap-card h3 { margin: 0 0 5px; }
+.recap-card p { margin: 0; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
+
+.admin-dialog {
+  width: min(440px, calc(100% - 28px));
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.admin-dialog::backdrop { background: rgba(0, 0, 0, 0.72); }
+.admin-dialog-close { display: flex; justify-content: flex-end; margin: -8px -8px 12px; }
+.admin-dialog-close .ghost-button { min-height: 34px; }
+.admin-detail { color: var(--muted); line-height: 1.5; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+.admin-roster-editor {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.admin-roster-heading,
+.admin-roster-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-roster-heading p { margin: 0; }
+.admin-roster-heading label,
+.admin-roster-row span { color: var(--muted); font-size: 0.78rem; font-weight: 800; }
+
+.admin-roster-editor input {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #11161b;
+  color: var(--text);
+  padding: 0 9px;
+}
+
+.admin-roster-heading input { width: 76px; margin-left: 6px; }
+.admin-roster-row input { width: min(290px, 68%); }
+
+.ghost-button:disabled { cursor: not-allowed; opacity: 0.55; }
 
 .schedule-total-grid,
 .schedule-owner-grid,
@@ -938,6 +1061,10 @@ h3 {
     grid-template-columns: 1fr;
   }
 
+  .projection-row {
+    grid-template-columns: minmax(140px, 1fr) 90px 90px 90px;
+  }
+
   .leader-row {
     grid-template-columns: 40px 1fr 72px 72px;
   }
@@ -990,4 +1117,9 @@ h3 {
   .year-champions { grid-template-columns: 1fr; }
   .all-time-row { grid-template-columns: minmax(0, 1fr) 72px 72px; }
   .all-time-owner, .all-time-stat { padding: 8px 6px; }
+  .projection-row { grid-template-columns: minmax(0, 1fr) 64px 76px 78px; }
+  .projection-row > div { padding: 10px 5px; }
+  .projection-row span { font-size: 0.61rem; }
+  .recap-card { grid-template-columns: 64px minmax(0, 1fr); gap: 10px; }
+  .recap-card .pill { display: none; }
 }

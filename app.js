@@ -1,9 +1,11 @@
 const SCOREBOARD_API_URL = "/api/scoreboard";
+const LEAGUE_API_URL = "/api/league";
+const APP_CONFIG_API_URL = "/api/app-config";
 const SCORE_CACHE_KEY = "wins-pool-score-cache-v1";
 const POLL_MS = 60_000;
 const FULL_REFRESH_MS = 10 * 60_000;
 const REGULAR_SEASON_TYPE = 2;
-const SEASONS = [2026, 2025, 2024];
+let SEASONS = [2026, 2025, 2024];
 const WEEKS = Array.from({ length: 18 }, (_, index) => index + 1);
 
 const NFL_TEAMS = [
@@ -102,6 +104,7 @@ const INITIAL_DRAFT = [
 
 const state = {
   draft: cloneDraft(INITIAL_DRAFT),
+  draftsBySeason: new Map(SEASONS.map((season) => [season, cloneDraft(INITIAL_DRAFT)])),
   season: getInitialSeason(),
   gamesByWeek: loadScoreCache(getInitialSeason()),
   currentWeek: getInitialSeason() === SEASONS[0] ? 1 : 18,
@@ -114,6 +117,10 @@ const state = {
   selectedScheduleOwner: "",
   yearlyStandings: null,
   yearlyIsLoading: false,
+  recaps: [],
+  supabaseClient: null,
+  admin: null,
+  adminConfigReady: false,
   lastSync: null,
   fullRefreshAt: 0,
   isSyncing: false,
@@ -122,6 +129,7 @@ const state = {
 const els = {
   feedStatus: document.querySelector("#feedStatus"),
   refreshButton: document.querySelector("#refreshButton"),
+  adminButton: document.querySelector("#adminButton"),
   seasonSelect: document.querySelector("#seasonSelect"),
   seasonValue: document.querySelector("#seasonValue"),
   weekValue: document.querySelector("#weekValue"),
@@ -140,8 +148,16 @@ const els = {
   headToHeadMatrix: document.querySelector("#headToHeadMatrix"),
   scheduleImpactStatus: document.querySelector("#scheduleImpactStatus"),
   scheduleImpactBoard: document.querySelector("#scheduleImpactBoard"),
+  projectionsBoard: document.querySelector("#projectionsBoard"),
+  recapsStatus: document.querySelector("#recapsStatus"),
+  recapsBoard: document.querySelector("#recapsBoard"),
   yearToYearStatus: document.querySelector("#yearToYearStatus"),
   yearToYearBoard: document.querySelector("#yearToYearBoard"),
+  adminDialog: document.querySelector("#adminDialog"),
+  adminTitle: document.querySelector("#adminTitle"),
+  adminDetail: document.querySelector("#adminDetail"),
+  adminRosterEditor: document.querySelector("#adminRosterEditor"),
+  adminActions: document.querySelector("#adminActions"),
 };
 
 init();
@@ -151,14 +167,18 @@ function init() {
   buildWeekSelect();
   bindEvents();
   render();
+  loadLeagueData();
+  setupAdminAuth();
   syncScores({ full: true });
   window.setInterval(() => syncScores({ full: false }), POLL_MS);
 }
 
 function bindEvents() {
   els.refreshButton.addEventListener("click", () => syncScores({ full: true }));
+  els.adminButton.addEventListener("click", openAdminDialog);
   els.seasonSelect.addEventListener("change", () => {
     state.season = Number(els.seasonSelect.value);
+    state.draft = getDraftForSeason(state.season);
     state.gamesByWeek = loadScoreCache(state.season);
     state.currentWeek = state.season === SEASONS[0] ? state.currentWeek : 18;
     state.selectedWeek = state.season === SEASONS[0] ? 1 : 18;
@@ -212,6 +232,16 @@ function bindEvents() {
     });
   });
 
+  els.adminActions.addEventListener("click", async (event) => {
+    const action = event.target.closest("[data-admin-action]")?.dataset.adminAction;
+    if (action === "archive") await archiveWeek();
+    if (action === "signout") await signOutAdmin();
+  });
+
+  els.adminRosterEditor.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-admin-action='save-roster']")) await saveRoster();
+  });
+
 }
 
 function setSelectedWeek(week) {
@@ -226,12 +256,188 @@ function buildSeasonSelect() {
   els.seasonSelect.value = String(state.season);
 }
 
+function getDraftForSeason(season) {
+  return cloneDraft(state.draftsBySeason.get(season) || INITIAL_DRAFT);
+}
+
 function buildWeekSelect() {
   const options = WEEKS.map((week) => `<option value="${week}">Week ${week}</option>`).join("");
   els.weekSelect.innerHTML = options;
   els.rosterWeekSelect.innerHTML = options;
   els.weekSelect.value = String(state.selectedWeek);
   els.rosterWeekSelect.value = String(state.rosterWeek);
+}
+
+async function loadLeagueData() {
+  try {
+    const response = await fetch(LEAGUE_API_URL, { cache: "no-store" });
+    if (!response.ok) throw new Error(`League API ${response.status}`);
+    const data = await response.json();
+    const rowsBySeason = new Map();
+    (data.rosters || []).forEach((row) => {
+      if (!rowsBySeason.has(row.season)) rowsBySeason.set(row.season, new Map());
+      const owners = rowsBySeason.get(row.season);
+      if (!owners.has(row.owner_name)) owners.set(row.owner_name, []);
+      owners.get(row.owner_name).push(row.team_abbreviation);
+    });
+
+    if (rowsBySeason.size) {
+      state.draftsBySeason = new Map(
+        Array.from(rowsBySeason, ([season, owners]) => [
+          season,
+          Array.from(owners, ([owner, teams]) => ({ owner, teams })),
+        ]),
+      );
+      SEASONS = Array.from(state.draftsBySeason.keys()).sort((a, b) => b - a);
+      if (!SEASONS.includes(state.season)) state.season = SEASONS[0];
+      state.draft = getDraftForSeason(state.season);
+      buildSeasonSelect();
+    }
+    state.recaps = data.recaps || [];
+  } catch (error) {
+    console.warn("Using local league fallback", error);
+  } finally {
+    render();
+  }
+}
+
+async function setupAdminAuth() {
+  try {
+    const response = await fetch(APP_CONFIG_API_URL, { cache: "no-store" });
+    if (!response.ok) throw new Error(`Config API ${response.status}`);
+    const config = await response.json();
+    if (!config.supabaseUrl || !config.supabaseAnonKey || !window.supabase) return;
+
+    state.supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
+      auth: { persistSession: true, detectSessionInUrl: true },
+    });
+    state.adminConfigReady = true;
+    const { data } = await state.supabaseClient.auth.getSession();
+    if (data.session) await verifyAdminSession(data.session.access_token);
+  } catch (error) {
+    console.warn("Administrator access is not configured", error);
+  } finally {
+    updateAdminButton();
+  }
+}
+
+async function verifyAdminSession(accessToken) {
+  const response = await fetch("/api/auth/session", {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    state.admin = null;
+    return false;
+  }
+  const session = await response.json();
+  state.admin = session.admin ? session : null;
+  return Boolean(state.admin);
+}
+
+function updateAdminButton() {
+  els.adminButton.textContent = state.admin ? "Admin" : "Sign in";
+  els.adminButton.disabled = !state.adminConfigReady;
+}
+
+async function openAdminDialog() {
+  if (!state.adminConfigReady) return;
+  if (!state.admin) {
+    const { error } = await state.supabaseClient.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) console.error(error);
+    return;
+  }
+
+  els.adminTitle.textContent = state.admin.displayName || "Administrator";
+  els.adminDetail.textContent = `${state.admin.email} has league administration access.`;
+  renderAdminRosterEditor();
+  els.adminActions.innerHTML = `
+    <button class="control-button" type="button" data-admin-action="archive">Archive completed week</button>
+    <button class="ghost-button" type="button" data-admin-action="signout">Sign out</button>
+  `;
+  els.adminDialog.showModal();
+}
+
+function renderAdminRosterEditor() {
+  els.adminRosterEditor.innerHTML = `
+    <div class="admin-roster-heading"><p class="eyebrow">Season Roster</p><label>Season <input id="adminSeason" type="number" min="2000" max="2100" value="${state.season}" /></label></div>
+    <div class="admin-roster-list">
+      ${state.draft
+        .map(
+          (entry) => `
+            <label class="admin-roster-row">
+              <span>${escapeHtml(entry.owner)}</span>
+              <input data-admin-owner="${escapeHtml(entry.owner)}" value="${escapeHtml(entry.teams.join(", "))}" aria-label="${escapeHtml(entry.owner)} roster" />
+            </label>
+          `,
+        )
+        .join("")}
+    </div>
+    <button class="ghost-button" type="button" data-admin-action="save-roster">Save roster</button>
+  `;
+}
+
+async function archiveWeek() {
+  const { data } = await state.supabaseClient.auth.getSession();
+  if (!data.session) return;
+  els.adminDetail.textContent = "Archiving final games and rebuilding the weekly record.";
+  try {
+    const response = await fetch("/api/admin/archive-week", {
+      method: "POST",
+      headers: { authorization: `Bearer ${data.session.access_token}` },
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Archive failed");
+    els.adminDetail.textContent = `${result.recap} archived successfully.`;
+    await loadLeagueData();
+  } catch (error) {
+    console.error(error);
+    els.adminDetail.textContent = "Archive could not be completed.";
+  }
+}
+
+async function saveRoster() {
+  const season = Number(document.querySelector("#adminSeason")?.value);
+  const rosters = Array.from(els.adminRosterEditor.querySelectorAll("[data-admin-owner]")).map((input) => ({
+    owner: input.dataset.adminOwner,
+    teams: input.value
+      .split(",")
+      .map((team) => team.trim().toUpperCase())
+      .filter(Boolean),
+  }));
+  if (!Number.isInteger(season) || season < 2000 || season > 2100 || rosters.some((entry) => !entry.teams.length)) {
+    els.adminDetail.textContent = "Enter a valid season and at least one team for every owner.";
+    return;
+  }
+
+  const { data } = await state.supabaseClient.auth.getSession();
+  if (!data.session) return;
+  try {
+    const response = await fetch("/api/admin/roster", {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${data.session.access_token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ season, rosters }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Roster save failed");
+    els.adminDetail.textContent = `${season} roster saved.`;
+    await loadLeagueData();
+  } catch (error) {
+    console.error(error);
+    els.adminDetail.textContent = "Roster could not be saved. Use each team abbreviation once.";
+  }
+}
+
+async function signOutAdmin() {
+  await state.supabaseClient.auth.signOut();
+  state.admin = null;
+  updateAdminButton();
+  els.adminDialog.close();
 }
 
 function getInitialSeason() {
@@ -376,6 +582,8 @@ function render() {
   renderRosters(model);
   renderHeadToHead(model);
   renderScheduleImpact(model);
+  renderProjections(model);
+  renderRecaps();
   renderYearToYear();
 }
 
@@ -389,7 +597,7 @@ async function loadYearToYearStandings() {
     const seasonRows = await Promise.all(
       SEASONS.map(async (season) => {
         const gamesByWeek = await loadSeasonGames(season);
-        return [season, calculateSeasonStandings(gamesByWeek)];
+        return [season, calculateSeasonStandings(gamesByWeek, getDraftForSeason(season))];
       }),
     );
     state.yearlyStandings = new Map(seasonRows);
@@ -419,11 +627,11 @@ async function loadSeasonGames(season) {
   return gamesByWeek;
 }
 
-function calculateSeasonStandings(gamesByWeek) {
+function calculateSeasonStandings(gamesByWeek, draft = state.draft) {
   const ownerByTeam = new Map();
-  state.draft.forEach((entry) => entry.teams.forEach((team) => ownerByTeam.set(team, entry.owner)));
+  draft.forEach((entry) => entry.teams.forEach((team) => ownerByTeam.set(team, entry.owner)));
 
-  const standings = state.draft.map((entry) => ({
+  const standings = draft.map((entry) => ({
     owner: entry.owner,
     wins: 0,
     losses: 0,
@@ -565,7 +773,70 @@ function buildLeagueModel() {
     allGames,
     cutoffGames,
     selectedGames: state.gamesByWeek[state.selectedWeek] || [],
+    projectedStandings: buildProjectedStandings(owners, ownerByTeam, allGames),
   };
+}
+
+function buildProjectedStandings(owners, ownerByTeam, games) {
+  const rows = owners.map((entry) => ({
+    owner: entry.owner,
+    wins: 0,
+    pointsFor: 0,
+    expectedWins: 0,
+    pricedGames: 0,
+    unpricedGames: 0,
+  }));
+  const byOwner = new Map(rows.map((row) => [row.owner, row]));
+
+  games.forEach((game) => {
+    if (game.competitors.length < 2) return;
+    const [first, second] = game.competitors;
+    const away = first.homeAway === "away" ? first : second;
+    const home = first.homeAway === "home" ? first : second;
+    const probabilities = impliedProbabilities(game.odds);
+
+    [first, second].forEach((team) => {
+      const owner = ownerByTeam.get(team.abbrev);
+      if (!owner) return;
+      const row = byOwner.get(owner);
+      const opponent = team === first ? second : first;
+      if (game.completed) {
+        row.pointsFor += team.score;
+        if (team.score > opponent.score) row.wins += 1;
+        return;
+      }
+
+      const probability = team === away ? probabilities.away : probabilities.home;
+      if (probability === null) row.unpricedGames += 1;
+      else {
+        row.expectedWins += probability;
+        row.pricedGames += 1;
+      }
+    });
+  });
+
+  return rows
+    .map((row) => ({ ...row, projectedWins: row.wins + row.expectedWins }))
+    .sort(
+      (a, b) =>
+        b.projectedWins - a.projectedWins ||
+        b.wins - a.wins ||
+        b.pointsFor - a.pointsFor ||
+        a.owner.localeCompare(b.owner),
+    );
+}
+
+function impliedProbabilities(odds) {
+  const toProbability = (moneyline) => {
+    const value = Number(String(moneyline || "").replace("+", ""));
+    if (!Number.isFinite(value) || value === 0) return null;
+    return value < 0 ? -value / (-value + 100) : 100 / (value + 100);
+  };
+  const away = toProbability(odds?.awayMoneyline);
+  const home = toProbability(odds?.homeMoneyline);
+  if (away === null || home === null) return { away: null, home: null };
+  const total = away + home;
+  return { away: away / total, home: home / total };
 }
 
 function buildTeamStats(owners, ownerByTeam, games) {
@@ -941,6 +1212,50 @@ function renderScheduleImpact(model) {
   `;
 }
 
+function renderProjections(model) {
+  const rows = model.projectedStandings;
+  const pricedGames = rows.reduce((total, row) => total + row.pricedGames, 0);
+  const unpricedGames = rows.reduce((total, row) => total + row.unpricedGames, 0);
+
+  els.projectionsBoard.innerHTML = rows.length
+    ? `
+      <div class="projection-note">${pricedGames} remaining team games priced${unpricedGames ? ` / ${unpricedGames} awaiting lines` : ""}</div>
+      <div class="projection-list">
+        ${rows
+          .map(
+            (row, index) => `
+              <article class="projection-row">
+                <div class="projection-owner"><span class="rank">${index + 1}</span><strong>${escapeHtml(row.owner)}</strong></div>
+                <div><span>Current</span><strong>${row.wins}</strong></div>
+                <div><span>Expected</span><strong>+${row.expectedWins.toFixed(1)}</strong></div>
+                <div><span>Projected</span><strong>${row.projectedWins.toFixed(1)}</strong></div>
+              </article>
+            `,
+          )
+          .join("")}
+      </div>
+    `
+    : `<div class="notice">Projected standings will appear when the season schedule is loaded.</div>`;
+}
+
+function renderRecaps() {
+  const recaps = state.recaps.filter((recap) => Number(recap.season) === state.season);
+  els.recapsStatus.textContent = recaps.length ? `${recaps.length} archived week${recaps.length === 1 ? "" : "s"}` : "Awaiting archive";
+  els.recapsBoard.innerHTML = recaps.length
+    ? recaps
+        .map(
+          (recap) => `
+            <article class="recap-card">
+              <div class="recap-week">Week ${escapeHtml(recap.week)}</div>
+              <div><h3>${escapeHtml(recap.title)}</h3><p>${escapeHtml(recap.summary)}</p></div>
+              <span class="pill accent">${escapeHtml(recap.winner_name || "League recap")}</span>
+            </article>
+          `,
+        )
+        .join("")
+    : `<div class="notice">The official recap publishes after the Tuesday archive completes.</div>`;
+}
+
 function renderScheduleGameList(games, emptyMessage) {
   if (!games.length) return `<div class="schedule-empty">${emptyMessage}</div>`;
   return games
@@ -972,12 +1287,13 @@ function renderYearToYear() {
   }
 
   const years = [...SEASONS].sort((a, b) => a - b);
-  const rows = state.draft
-    .map((entry) => {
-      const results = years.map((year) => state.yearlyStandings.get(year)?.find((row) => row.owner === entry.owner));
+  const ownerNames = [...new Set(years.flatMap((year) => getDraftForSeason(year).map((entry) => entry.owner)))];
+  const rows = ownerNames
+    .map((owner) => {
+      const results = years.map((year) => state.yearlyStandings.get(year)?.find((row) => row.owner === owner));
       const totalWins = results.reduce((total, row) => total + (row?.wins || 0), 0);
       const totalPoints = results.reduce((total, row) => total + (row?.pointsFor || 0), 0);
-      return { owner: entry.owner, results, totalWins, totalPoints };
+      return { owner, results, totalWins, totalPoints };
     })
     .sort(
       (a, b) =>

@@ -26,6 +26,7 @@
             <strong id="feedStatus">Connecting</strong>
           </div>
           <button id="refreshButton" class="control-button" type="button">Sync Scores</button>
+          <button id="adminButton" class="ghost-button" type="button">Admin</button>
         </div>
       </header>
 
@@ -82,6 +83,8 @@
           <button class="tab-button" data-tab="rosters" type="button">Rosters</button>
           <button class="tab-button" data-tab="headToHead" type="button">Head to Head</button>
           <button class="tab-button" data-tab="scheduleImpact" type="button">Schedule Impact</button>
+          <button class="tab-button" data-tab="projections" type="button">Projections</button>
+          <button class="tab-button" data-tab="recaps" type="button">Recaps</button>
           <button class="tab-button" data-tab="yearToYear" type="button">Year to Year</button>
         </section>
 
@@ -136,6 +139,28 @@
           <div id="scheduleImpactBoard" class="schedule-impact-board"></div>
         </section>
 
+        <section id="projectionsTab" class="tab-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Remaining Games</p>
+              <h2>Projected Standings</h2>
+            </div>
+            <span class="pill">Moneyline implied</span>
+          </div>
+          <div id="projectionsBoard" class="projections-board"></div>
+        </section>
+
+        <section id="recapsTab" class="tab-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Official Weekly Record</p>
+              <h2>Recaps</h2>
+            </div>
+            <span id="recapsStatus" class="pill">Awaiting archive</span>
+          </div>
+          <div id="recapsBoard" class="recaps-board"></div>
+        </section>
+
         <section id="yearToYearTab" class="tab-panel">
           <div class="section-heading">
             <div>
@@ -149,6 +174,16 @@
       </main>
     </div>
 
+    <dialog id="adminDialog" class="admin-dialog">
+      <form method="dialog" class="admin-dialog-close"><button type="submit" class="ghost-button" aria-label="Close">Close</button></form>
+      <p class="eyebrow">League Administration</p>
+      <h2 id="adminTitle">Admin</h2>
+      <p id="adminDetail" class="admin-detail">Sign in to manage the league.</p>
+      <div id="adminRosterEditor" class="admin-roster-editor"></div>
+      <div id="adminActions" class="admin-actions"></div>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
   </body>
 </html>
