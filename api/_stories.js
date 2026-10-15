@@ -31,7 +31,9 @@ export async function generateNarrative(config, storyType, facts, { throwOnError
       body: JSON.stringify({
         model: MODEL,
         temperature: 0.75,
-        max_tokens: 170,
+        max_tokens: 320,
+        reasoning: { effort: "none" },
+        stream: false,
         messages: [
           {
             role: "system",
