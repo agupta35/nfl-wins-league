@@ -17,7 +17,8 @@ export default async function handler(request, response) {
       rostersResponse.json(),
       recapsResponse.json(),
     ]);
-    response.setHeader("cache-control", "public, s-maxage=60, stale-while-revalidate=300");
+    // League history changes immediately after a manual or scheduled archive.
+    response.setHeader("cache-control", "no-store");
     return sendJson(response, 200, { seasons, rosters, recaps });
   } catch (error) {
     console.error(error);
