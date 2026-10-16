@@ -30,6 +30,11 @@ export async function refreshLeagueIntelligence(config, season, recaps) {
   });
 
   const storylines = buildStorylines(orderedRecaps, candidates);
+  await supabaseRequest(config, `/rest/v1/league_storylines?season=eq.${season}&status=eq.developing`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ status: "dormant", updated_at: new Date().toISOString() }),
+  });
   if (storylines.length) {
     await supabaseRequest(config, "/rest/v1/league_storylines?on_conflict=season,storyline_key", {
       method: "POST",
@@ -120,23 +125,32 @@ function discoverCandidates(recap, previousRecap) {
 
 function buildStorylines(recaps, candidates) {
   const latestWeek = recaps.at(-1).week;
-  const firstWeekByKey = new Map();
-  candidates.forEach((entry) => {
-    if (!entry.selected || !["title_race", "power_shift_up", "power_shift_down", "cold_streak"].includes(entry.candidate_type)) return;
-    const key = entry.candidate_type === "title_race"
+  const currentCandidates = candidates.filter(
+    (entry) =>
+      entry.week === latestWeek &&
+      entry.selected &&
+      ["title_race", "power_shift_up", "power_shift_down", "cold_streak"].includes(entry.candidate_type),
+  );
+  return currentCandidates.map((entry) => {
+    const storyline_key = entry.candidate_type === "title_race"
       ? "title-race"
       : `${entry.candidate_type}:${entry.owners[0]}`;
-    if (!firstWeekByKey.has(key)) firstWeekByKey.set(key, { entry, week: entry.week });
-  });
-  return [...firstWeekByKey.entries()].map(([storyline_key, { entry, week }]) => ({
+    const firstRelatedCandidate = candidates.find((candidate) => {
+      const candidateKey = candidate.candidate_type === "title_race"
+        ? "title-race"
+        : `${candidate.candidate_type}:${candidate.owners[0]}`;
+      return candidateKey === storyline_key;
+    });
+    return {
     storyline_key,
     storyline_type: entry.candidate_type,
     owners: entry.owners,
     status: "developing",
-    started_week: week,
+    started_week: firstRelatedCandidate?.week || latestWeek,
     last_covered_week: latestWeek,
     details: entry.facts,
-  }));
+    };
+  });
 }
 
 function candidate(week, candidate_key, candidate_type, owners, facts, impact_score, novelty_score) {
