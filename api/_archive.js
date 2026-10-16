@@ -1,4 +1,5 @@
 import { generateSeasonStory, generateWeeklyRecapNarrative, saveStory } from "./_stories.js";
+import { loadEditorialBrief, refreshLeagueIntelligence } from "./_intelligence.js";
 import { supabaseRequest } from "./_supabase.js";
 
 const ESPN_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
@@ -83,12 +84,15 @@ export async function archiveCurrentSeason(config, { includeAiNarrative = false 
     if (previousNarrative) recap.recap_data.aiNarrative = previousNarrative;
   });
 
+  await refreshLeagueIntelligence(config, season, recaps);
+
   if (includeAiNarrative && recaps.length) {
     const latestRecap = recaps.at(-1);
-    const narrative = await generateWeeklyRecapNarrative(config, latestRecap);
+    const editorialBrief = await loadEditorialBrief(config, season, latestRecap.week);
+    const narrative = await generateWeeklyRecapNarrative(config, latestRecap, { editorialBrief });
     if (narrative) latestRecap.recap_data.aiNarrative = narrative;
 
-    const seasonNarrative = await generateSeasonStory(config, season, latestRecap.week, latestRecap.recap_data.standings);
+    const seasonNarrative = await generateSeasonStory(config, season, latestRecap.week, latestRecap.recap_data.standings, { editorialBrief });
     if (seasonNarrative) {
       await saveStory(config, {
         season,

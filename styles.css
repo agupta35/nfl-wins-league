@@ -167,10 +167,16 @@ h3 {
   text-transform: uppercase;
 }
 
+.pulse-kicker { display: flex; align-items: center; gap: 11px; }
+.pulse-kicker > span { display: block; }
+.pulse-mark { width: 48px; height: 48px; flex: 0 0 auto; }
 .pulse-live-dot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(57, 229, 140, 0.12); }
 .pulse-copy h2 { margin: 3px 0 7px; font-family: "Oswald", Impact, sans-serif; font-size: 1.5rem; letter-spacing: 0; }
 .story-beats { display: grid; gap: 7px; }
 .story-beats p { max-width: 920px; margin: 0; color: var(--muted); line-height: 1.45; }
+.pulse-signals { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+.pulse-signals span { display: inline-flex; gap: 7px; align-items: center; min-height: 26px; padding: 4px 8px; border: 1px solid rgba(56, 189, 248, 0.26); background: rgba(56, 189, 248, 0.07); color: #c9dce7; font-size: 0.7rem; font-weight: 700; }
+.pulse-signals b { color: var(--green); font-family: "Oswald", Impact, sans-serif; font-size: 0.75rem; text-transform: uppercase; }
 .pulse-stamp { padding-left: 18px; border-left: 1px solid var(--line); text-align: right; font-size: 1.25rem; }
 .pulse-stamp span { color: var(--muted); font-family: "Roboto", sans-serif; font-size: 0.64rem; font-weight: 800; }
 

@@ -119,6 +119,8 @@ const state = {
   yearlyIsLoading: false,
   recaps: [],
   stories: [],
+  storyCandidates: [],
+  storylines: [],
   supabaseClient: null,
   admin: null,
   adminConfigReady: false,
@@ -299,6 +301,8 @@ async function loadLeagueData() {
     }
     state.recaps = data.recaps || [];
     state.stories = data.stories || [];
+    state.storyCandidates = data.candidates || [];
+    state.storylines = data.storylines || [];
   } catch (error) {
     console.warn("Using local league fallback", error);
   } finally {
@@ -669,6 +673,7 @@ function calculateSeasonStandings(gamesByWeek, draft = state.draft) {
     owner: entry.owner,
     wins: 0,
     losses: 0,
+    ties: 0,
     pointsFor: 0,
   }));
   const standingsByOwner = new Map(standings.map((entry) => [entry.owner, entry]));
@@ -686,6 +691,7 @@ function calculateSeasonStandings(gamesByWeek, draft = state.draft) {
         row.pointsFor += team.score;
         if (team.score > opponent.score) row.wins += 1;
         if (team.score < opponent.score) row.losses += 1;
+        if (team.score === opponent.score) row.ties += 1;
       });
     });
 
@@ -965,10 +971,45 @@ function renderLeaguePulse(model) {
     : fallback;
 
   els.leaguePulse.innerHTML = `
-    <div class="pulse-kicker"><span class="pulse-live-dot"></span>${escapeHtml(content.type)}</div>
-    <div class="pulse-copy"><p class="eyebrow">League Pulse</p><h2>${escapeHtml(content.headline)}</h2>${renderStoryBeats(content.body)}</div>
+    <div class="pulse-kicker"><img class="pulse-mark" src="assets/commish-broadcast.svg" alt="" /><span><span class="pulse-live-dot"></span>${escapeHtml(content.type)}</span></div>
+    <div class="pulse-copy"><p class="eyebrow">League Pulse</p><h2>${escapeHtml(content.headline)}</h2>${renderStoryBeats(content.body)}${renderPulseSignals()}</div>
     <div class="pulse-stamp">${state.season}<br /><span>WEEK ${state.currentWeek}</span></div>
   `;
+}
+
+function renderPulseSignals() {
+  const latestWeek = Math.max(
+    0,
+    ...state.storyCandidates
+      .filter((candidate) => Number(candidate.season) === state.season && Number(candidate.week) <= state.currentWeek)
+      .map((candidate) => Number(candidate.week)),
+  );
+  if (!latestWeek) return "";
+  const signals = state.storyCandidates
+    .filter((candidate) => Number(candidate.season) === state.season && Number(candidate.week) === latestWeek)
+    .slice(0, 2)
+    .map((candidate) => pulseSignalCopy(candidate))
+    .filter(Boolean);
+  return signals.length
+    ? `<div class="pulse-signals">${signals.map((signal) => `<span><b>${escapeHtml(signal.label)}</b>${escapeHtml(signal.detail)}</span>`).join("")}</div>`
+    : "";
+}
+
+function pulseSignalCopy(candidate) {
+  const facts = candidate.facts || {};
+  if (candidate.candidate_type === "title_race") {
+    return { label: "Title race", detail: `${facts.leader} vs ${facts.challenger}, ${facts.winGap} win${facts.winGap === 1 ? "" : "s"} apart` };
+  }
+  if (candidate.candidate_type === "lead_change") {
+    return { label: "New leader", detail: `${facts.newLeader} moved past ${facts.displacedLeader}` };
+  }
+  if (candidate.candidate_type === "cold_streak") {
+    return { label: "Cold seat", detail: `${facts.owner} has dropped ${facts.losingWeeks} straight losing weeks` };
+  }
+  if (candidate.candidate_type === "power_shift_up" || candidate.candidate_type === "power_shift_down") {
+    return { label: "Movement", detail: `${facts.owner}: #${facts.fromRank} to #${facts.toRank}` };
+  }
+  return null;
 }
 
 function renderSeasonStory(model) {
@@ -1463,7 +1504,7 @@ function renderYearToYear() {
       const champion = state.yearlyStandings.get(year)?.[0];
       if (!champion) return "";
       const gamesTracked = champion.wins + champion.losses + champion.ties;
-      const seasonComplete = gamesTracked >= 102;
+      const seasonComplete = year < Math.max(...SEASONS) || gamesTracked >= 102;
       return `
         <article class="year-champion-card ${seasonComplete ? "" : "in-progress"}">
           <p class="eyebrow">${year} ${seasonComplete ? "Champion" : "Current Leader"}</p>

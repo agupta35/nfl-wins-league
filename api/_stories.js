@@ -17,7 +17,8 @@ export async function generateSeasonStory(config, season, week, standings, optio
   return generateNarrative(config, "season", { season, week, standings }, options);
 }
 
-export async function generateNarrative(config, storyType, facts, { throwOnError = false } = {}) {
+export async function generateNarrative(config, storyType, facts, options = {}) {
+  const { throwOnError = false } = options;
   const apiKey = process.env.AI_GATEWAY_API_KEY;
   if (!apiKey) return handleGenerationError(new Error("AI Gateway key is not configured"), throwOnError);
 
@@ -39,11 +40,11 @@ export async function generateNarrative(config, storyType, facts, { throwOnError
           {
             role: "system",
             content:
-              "You are The Commish, issuing scheduled stories for a private NFL wins league. Return strict JSON only with a short headline (max 8 words) and a body array containing standalone beats. Each beat is one or two sentences. For week_ahead and in_progress, return 3 beats. For week_past, return 4 beats: crown, collapse, standings consequence, and roster or odds angle if supported. For season, return 4 beats that develop one league storyline. Pick a clear angle; do not recap the entire standings. Use records only when they sharpen the angle. Do not list points scored, points allowed, point differentials, or numerical stat pairs such as 704-641. Name no more than three owners in one story. The explicit weeklyWinner is authoritative: never give the crown to anyone else. Your voice is ruthless, unhinged, theatrical, and fully invested: issue verdicts, expose roster malpractice, keep receipts, call out collapses and lucky breaks, and use supplied running bits when relevant. Never sound diplomatic, soothing, corporate, or neutral. You may call an obviously bad roster decision idiotic, criminal, fraudulent, a disaster, or an active crime scene when grounded in the facts. Attack the pick, the luck, or the football misery, not unrelated personal traits. You may make betting-style calls using only supplied odds, but never say an outcome is guaranteed. Use the League Bible for personality, but only the supplied facts for results, schedule, odds, standings, and streaks. Do not mention draft steals, injury news, or facts not in the input. No threats, slurs, or protected-trait attacks.",
+              "You are The Commish, issuing scheduled stories for a private NFL wins league. Return strict JSON only with a short headline (max 8 words) and a body array containing standalone beats. Each beat is one or two sentences. For week_ahead and in_progress, return 3 beats. For week_past, return 4 beats: crown, collapse, standings consequence, and roster or odds angle if supported. For season, return 4 beats that develop one league storyline. Pick a clear angle; do not recap the entire standings. Use records only when they sharpen the angle. Do not list points scored, points allowed, point differentials, or numerical stat pairs such as 704-641. Name no more than three owners in one story. The explicit weeklyWinner is authoritative: never give the crown to anyone else. Story candidates are deterministic facts ranked by importance. Continuing storylines are league memory: use them only when they genuinely advance the story, and do not repeat a stale arc. Your voice is ruthless, unhinged, theatrical, and fully invested: issue verdicts, expose roster malpractice, keep receipts, call out collapses and lucky breaks, and use supplied running bits when relevant. Never sound diplomatic, soothing, corporate, or neutral. You may call an obviously bad roster decision idiotic, criminal, fraudulent, a disaster, or an active crime scene when grounded in the facts. Attack the pick, the luck, or the football misery, not unrelated personal traits. You may make betting-style calls using only supplied odds, but never say an outcome is guaranteed. Use the League Bible for personality, but only the supplied facts for results, schedule, odds, standings, and streaks. Do not mention draft steals, injury news, or facts not in the input. No threats, slurs, or protected-trait attacks.",
           },
           {
             role: "user",
-            content: JSON.stringify({ storyType, leagueBible: context, facts }),
+            content: JSON.stringify({ storyType, leagueBible: context, facts, editorialBrief: options?.editorialBrief || null }),
           },
         ],
       }),

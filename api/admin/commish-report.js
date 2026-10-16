@@ -1,4 +1,5 @@
 import { requireAdmin } from "../_admin.js";
+import { loadEditorialBrief, refreshLeagueIntelligence } from "../_intelligence.js";
 import { loadLiveStoryFacts } from "../_live-story-data.js";
 import { generateNarrative, generateSeasonStory, generateWeeklyRecapNarrative, saveStory } from "../_stories.js";
 import { getSupabaseConfig, sendJson, supabaseRequest } from "../_supabase.js";
@@ -27,9 +28,13 @@ export default async function handler(request, response) {
       );
       const [recap] = await recapResponse.json();
       if (!recap) return sendJson(response, 404, { error: "Archive a completed week before publishing this report" });
+      const recapsResponse = await supabaseRequest(config, `/rest/v1/weekly_recaps?select=season,week,winner_name,recap_data,title,summary,published,generated_at,updated_at&season=eq.${season}&published=eq.true&order=week.asc`);
+      const recaps = await recapsResponse.json();
+      await refreshLeagueIntelligence(config, season, recaps);
+      const editorialBrief = await loadEditorialBrief(config, season, recap.week);
 
       if (storyType === "season") {
-      const narrative = await generateSeasonStory(config, season, recap.week, recap.recap_data.standings || [], { throwOnError: true });
+      const narrative = await generateSeasonStory(config, season, recap.week, recap.recap_data.standings || [], { throwOnError: true, editorialBrief });
         if (!narrative) return sendJson(response, 502, { error: "The Commish could not generate a report" });
         await saveStory(config, {
           season,
@@ -41,7 +46,7 @@ export default async function handler(request, response) {
         return sendJson(response, 200, { week: recap.week, storyType, headline: narrative.headline, publishedBy: admin.email });
       }
 
-      const narrative = await generateWeeklyRecapNarrative(config, recap, { throwOnError: true });
+      const narrative = await generateWeeklyRecapNarrative(config, recap, { throwOnError: true, editorialBrief });
       if (!narrative) return sendJson(response, 502, { error: "The Commish could not generate a report" });
       const recapData = { ...recap.recap_data, aiNarrative: narrative };
       await supabaseRequest(config, `/rest/v1/weekly_recaps?season=eq.${season}&week=eq.${recap.week}`, {
